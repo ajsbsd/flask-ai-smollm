@@ -1,0 +1,8 @@
+Flask
+markdown
+bleach
+
+# Uncomment these if your target servers will run the offline AI features:
+torch
+transformers
+accelerate

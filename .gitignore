@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+micropress.db
+micropress.db-journal
+micropress.db-wal
+micropress.db-shm
