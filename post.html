@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ post['title'] }} - MicroPress{% endblock %}
+{% block content %}
+<article>
+    <header>
+        <h1>{{ post['title'] }}</h1>
+        <small>Published on {{ post['created_at'] }}</small>
+    </header>
+    <div class="markdown-body">
+    {{ post['content']|markdown|safe }}
+</div>
+    <footer>
+        <a href="{{ url_for('index') }}">← Back to home</a>
+    </footer>
+</article>
+{% endblock %}

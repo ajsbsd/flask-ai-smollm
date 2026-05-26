@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MicroPress{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+    <header class="container">
+        <nav>
+            <ul>
+                <li><strong><a href="{{ url_for('index') }}" class="contrast">MicroPress</a></strong></li>
+            </ul>
+            <ul>
+                {% if session.get('logged_in') %}
+                    <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
+                    <li><a href="{{ url_for('logout') }}" class="secondary">Logout</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}">Admin Login</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </header>
+    <main class="container">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <article style="background-color: var(--pico-ins-color); padding: 10px; margin-bottom: 20px;">
+                {{ message }}
+              </article>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="container" style="text-align: center; margin-top: 50px;">
+        <small>Powered by MicroPress & SmolLM</small>
+    </footer>
+</body>
+</html>

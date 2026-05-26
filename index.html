@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Home - MicroPress{% endblock %}
+{% block content %}
+<section>
+    {% if posts %}
+        {% for post in posts %}
+            <article>
+                <header>
+                    <h2><a href="{{ url_for('view_post', post_id=post['id']) }}">{{ post['title'] }}</a></h2>
+                    <small>Published on {{ post['created_at'] }}</small>
+                </header>
+                <!-- Apply markdown parsing and safe rendering to the truncated preview -->
+                <div class="markdown-body">
+                    {{ post['content']|truncate(250)|markdown|safe }}
+                </div>
+                <footer>
+                    <a href="{{ url_for('view_post', post_id=post['id']) }}">Read More →</a>
+                </footer>
+            </article>
+        {% endfor %}
+    {% else %}
+        <p>No posts available yet.</p>
+    {% endif %}
+</section>
+{% endblock %}
