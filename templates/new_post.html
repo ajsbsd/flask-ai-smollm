@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Create New Post - MicroPress{% endblock %}
+{% block content %}
+<section>
+    <h2>Create New Post</h2>
+    
+    <!-- Flexbox layout for 2-column setup (Form left, AI Assistant right) -->
+    <div style="display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; margin-top: 20px;">
+        
+        <!-- LEFT: Create Post Form -->
+        <div style="flex: 1.2; min-width: 320px;">
+            <form action="{{ url_for('new_post') }}" method="POST">
+                <label for="title">Post Title</label>
+                <input type="text" id="title" name="title" required placeholder="Enter post title">
+                
+                <label for="content">Content</label>
+                <textarea id="content" name="content" required placeholder="Write your content here..." style="min-height: 280px;"></textarea>
+                
+                <div style="display: flex; gap: 15px; margin-top: 20px;">
+                    <button type="submit">Publish Post</button>
+                    <a href="{{ url_for('admin_dashboard') }}" class="button outline secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+        
+        <!-- RIGHT: AI Co-Writer Assistant Panel -->
+        <div style="flex: 0.8; min-width: 300px; background-color: #fafbfc; border: 1px solid #e1e4e8; border-radius: 8px; padding: 25px;">
+            <h3 style="margin-top: 0; font-size: 1.25rem;">Oracle AI Assistant</h3>
+            <p style="font-size: 0.85rem; color: #586069; margin-bottom: 15px;">
+                Ask the local Qwen3 engine to draft, expand, or summarize ideas for your post.
+            </p>
+            
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <textarea id="ai-prompt" placeholder="Ask AI: 'Draft a summary of Germany and Russia relations in 1946...'" style="min-height: 80px; font-size: 0.9rem; margin: 0;"></textarea>
+                <button type="button" id="ai-gen-btn" class="outline" style="margin: 0; font-size: 0.9rem; padding: 8px 15px;">Ask Oracle</button>
+            </div>
+            
+            <!-- Output Block -->
+            <div style="margin-top: 20px;">
+                <label style="font-size: 0.85rem; font-weight: bold; color: #586069;">Generated Output</label>
+                <div id="ai-output" style="background: #ffffff; border: 1px dashed #d1d5da; border-radius: 4px; padding: 15px; min-height: 120px; font-size: 0.9rem; color: #24292e; white-space: pre-wrap; margin-top: 5px; max-height: 250px; overflow-y: auto;">
+                    Output will appear here...
+                </div>
+            </div>
+            
+            <!-- Insert Utility -->
+            <button type="button" id="ai-insert-btn" class="secondary" style="display: none; margin-top: 15px; width: 100%; font-size: 0.9rem; padding: 8px 15px;">
+                Insert into Content Area
+            </button>
+        </div>
+        
+    </div>
+</section>
+
+<!-- AI Assistant JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const aiGenBtn = document.getElementById('ai-gen-btn');
+    const aiPrompt = document.getElementById('ai-prompt');
+    const aiOutput = document.getElementById('ai-output');
+    const aiInsertBtn = document.getElementById('ai-insert-btn');
+    const contentArea = document.getElementById('content');
+
+    let lastGeneratedText = "";
+
+    aiGenBtn.addEventListener('click', async () => {
+        const promptText = aiPrompt.value.trim();
+        if (!promptText) {
+            alert("Please enter an AI prompt first.");
+            return;
+        }
+
+        // Disable input during generation
+        aiGenBtn.disabled = true;
+        aiGenBtn.innerText = "Thinking...";
+        aiOutput.innerText = "Drafting response using local Qwen3 model...";
+        aiInsertBtn.style.display = 'none';
+
+        try {
+            // Sends the query straight to your terminal executables endpoint
+            const response = await fetch('/api/exec', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: 'ai ' + promptText })
+            });
+            
+            const data = await response.json();
+            
+            if (data.output) {
+                // Strip out standard "ORACLE>" system prefix and metadata suffixes if present
+                let cleanResponse = data.output
+                    .replace(/^ORACLE>\s*/, '')
+                    .replace(/\s*\[CONTEXT:\s*\w+\]$/, '');
+                
+                lastGeneratedText = cleanResponse.trim();
+                aiOutput.innerText = lastGeneratedText;
+                aiInsertBtn.style.display = 'block';
+            } else {
+                aiOutput.innerText = "Error: Could not retrieve a generation from the model.";
+            }
+        } catch (error) {
+            logger.error("AI Generation error:", error);
+            aiOutput.innerText = "Connection lost. Ensure the Flask server is running.";
+        } finally {
+            aiGenBtn.disabled = false;
+            aiGenBtn.innerText = "Ask Oracle";
+        }
+    });
+
+    // Handles copying/inserting the text safely into the target textbox
+    aiInsertBtn.addEventListener('click', () => {
+        if (!lastGeneratedText) return;
+        
+        if (contentArea.value) {
+            contentArea.value += "\n\n" + lastGeneratedText;
+        } else {
+            contentArea.value = lastGeneratedText;
+        }
+        
+        // Visual indicator that the text was inserted
+        aiInsertBtn.innerText = "Copied & Inserted!";
+        setTimeout(() => {
+            aiInsertBtn.innerText = "Insert into Content Area";
+        }, 1500);
+    });
+});
+</script>
+{% endblock %}

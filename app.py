@@ -5,11 +5,11 @@ import json
 import secrets
 import re
 import logging
+import threading
 
 # === THIRD-PARTY ===
-import torch
 import markdown
-from flask import Flask, render_template, request, session, g, jsonify, current_app
+from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -31,20 +31,33 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
-# --- 1. AI SETUP (SmolLM-135M-Instruct) ---
+# --- 1. AI SETUP (Qwen3-0.6B-Instruct GGUF via Unsloth) ---
 print("Initializing system...")
-CHECKPOINT = "HuggingFaceTB/SmolLM-135M-Instruct"
-device = "cuda" if torch.cuda.is_available() else "cpu"
-tokenizer = None
+GGUF_REPO = "unsloth/Qwen3-0.6B-GGUF"
+GGUF_FILE = "Qwen3-0.6B-Q4_K_M.gguf"
+
+# Global thread lock and model pointer
+ai_lock = threading.Lock()
 model = None
 
 def load_ai():
-    global tokenizer, model
-    if model is None:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(CHECKPOINT)
-        model = AutoModelForCausalLM.from_pretrained(CHECKPOINT).to(device)
-        print(f"AI Model loaded on {device}")
+    global model
+    with ai_lock:
+        if model is None:
+            from llama_cpp import Llama
+            from huggingface_hub import hf_hub_download
+            
+            logger.info("Downloading/loading Qwen3 GGUF model...")
+            model_path = hf_hub_download(repo_id=GGUF_REPO, filename=GGUF_FILE)
+            
+            model = Llama(
+                model_path=model_path,
+                n_ctx=2048,
+                n_threads=4,
+                n_gpu_layers=0,
+                verbose=False
+            )
+            print("AI Model loaded (Qwen3-0.6B GGUF 4-bit) on CPU")
 
 # --- 2. CONFIG ---
 class Config:
@@ -52,6 +65,9 @@ class Config:
     DATABASE = 'micropress.db'
     ARCHIVE_DB = 'imperium_archive.db'
     DEBUG = True
+    SESSION_COOKIE_SECURE = False
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
 
 # --- 3. APP INITIALIZATION ---
 app = Flask(__name__)
@@ -80,9 +96,42 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
-# --- 6. TERMINAL API ---
+# --- 6. APP STARTUP: Ensure DB schema exists ---
+def init_db():
+    """Create tables if they don't exist and automatically migrate schema."""
+    with app.app_context():
+        try:
+            db = get_db()
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL
+                )
+            ''')
+            db.commit()
+            
+            # Auto-migration: ensure created_at column is present
+            try:
+                db.execute('ALTER TABLE posts ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                db.commit()
+                logger.info("Applied migration: created_at column ensured")
+            except sqlite3.OperationalError:
+                # Column already exists, safe to ignore
+                pass
+                
+            logger.info("Database schema initialized")
+        except Exception as e:
+            logger.error(f"DB init error: {e}")
+
+# Call immediately after app config to initialize DB and pre-load model on Gunicorn worker startup
+init_db()
+load_ai()
+
+# --- 7. TERMINAL API ---
 @app.route('/')
-def terminal_index():
+def index():
+    """Renders the interactive terminal console."""
     return render_template('terminal.html')
 
 @app.route('/api/exec', methods=['POST'])
@@ -99,6 +148,7 @@ def execute():
     args = " ".join(parts[1:])
     db = get_db()
 
+    # --- COMMANDS ---
     if cmd == 'help':
         return jsonify(output="Available: ls, cat [id], search [term], ai [prompt], clear, whoami")
 
@@ -109,12 +159,15 @@ def execute():
         return jsonify(output="\n".join([f"ID: {p['id']} | {p['title']}" for p in posts]))
 
     elif cmd == 'cat':
+        if not args:
+            return jsonify(output="Usage: cat [id]")
         post = db.execute('SELECT content FROM posts WHERE id=?', (args,)).fetchone()
         return jsonify(output=post['content'] if post else "Error: Document not found.")
 
     elif cmd == 'search':
         if not os.path.exists(app.config['ARCHIVE_DB']):
             return jsonify(output="Error: imperium_archive.db not found. Build your index first.")
+        
         search_db = sqlite3.connect(app.config['ARCHIVE_DB'])
         try:
             results = search_db.execute("""
@@ -122,8 +175,11 @@ def execute():
                 FROM document_pages WHERE content MATCH ?
                 ORDER BY bm25(document_pages) LIMIT 3
             """, (args,)).fetchall()
+            
             if not results:
                 return jsonify(output="No matches found in research archive.")
+            
+            # Save to session for RAG context
             session['last_search'] = {
                 "query": args,
                 "results": [{"page_number": r[0], "snippet": r[1]} for r in results]
@@ -137,30 +193,71 @@ def execute():
     elif cmd == 'ai':
         logger.debug(f"Generating response for prompt: {args[:100]}...")
         load_ai()
-        if args.lower().startswith("based on the search") and 'last_search' in session:
+        
+        # === RAG CONTEXT INJECTION ===
+        context_injected = False
+        context_text = ""
+        
+        prompt_lower = args.lower().strip()
+        if any(phrase in prompt_lower for phrase in [
+            "based on the search", 
+            "from the results", 
+            "using the snippets",
+            "according to the archive"
+        ]) and 'last_search' in session:
+            
             ctx = session['last_search']
-            context_text = "\n".join([f"[PG {r['page_number']}]: {r['snippet']}" for r in ctx['results']])
-            system_prompt = f"You are an analyst. Use ONLY these retrieved snippets to answer. If the answer isn't in the snippets, say 'Insufficient context.'\n\nRETRIEVED CONTEXT:\n{context_text}\n\nUSER QUESTION: {args}"
+            if ctx.get('results'):
+                context_text = "\n".join([f"[PG {r['page_number']}]: {r['snippet']}" for r in ctx['results']])
+                logger.debug(f"Injected RAG context: {len(ctx['results'])} snippets")
+                context_injected = True
+        
+        if context_injected:
+            system_prompt = f"""You are a research analyst. Answer using ONLY the retrieved snippets below. If the answer isn't in the snippets, say "Insufficient context in archive."
+
+RETRIEVED CONTEXT:
+{context_text}
+
+USER QUESTION: {args}"""
         else:
+            if 'last_search' not in session:
+                logger.warning("No last_search in session — RAG context unavailable")
             system_prompt = args
+        
+        # === MODEL GENERATION ===
         messages = [{"role": "user", "content": system_prompt}]
-        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=150,
-                do_sample=True,
-                temperature=0.3,
-                pad_token_id=tokenizer.eos_token_id,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=3
-            )
-        generated = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        
+        # Qwen3 GGUF automatically handles ChatML structures behind the scenes 
+        # using the create_chat_completion API.
+        response = model.create_chat_completion(
+            messages=messages,
+            max_tokens=512,  # Increased to 512 to give reasoning engine space to think and answer
+            temperature=0.3,
+            repeat_penalty=1.2,
+            stop=["<|im_end|>"]
+        )
+        
+        generated = response['choices'][0]['message']['content']
+        
+        # Extract and hide the thinking block for a cleaner terminal output
+        if "<think>" in generated and "</think>" in generated:
+            parts = generated.split("</think>")
+            thoughts = parts[0].replace("<think>", "").strip()
+            
+            # Print thoughts strictly to the server console for debugging
+            logger.debug(f"ORACLE INTERNAL THOUGHTS: {thoughts}") 
+            
+            # Only send the actual post-thought answer to the terminal user
+            generated = parts[1].strip()
+        
+        # Post-process repetition
         if generated.count("This is because") > 2:
             generated = generated.split("This is because")[0].strip()
-        logger.debug(f"Generated {len(generated.split())} tokens")
-        return jsonify(output=f"ORACLE> {generated.strip()}")
+        
+        suffix = " [CONTEXT: grounded]" if context_injected else " [CONTEXT: none]"
+        logger.debug(f"Generated {len(generated.split())} tokens{suffix}")
+        
+        return jsonify(output=f"ORACLE> {generated.strip()}{suffix}")
 
     elif cmd == 'clear':
         return jsonify(action='clear')
@@ -170,20 +267,120 @@ def execute():
 
     return jsonify(output=f"sh: command not found: {cmd}")
 
-# --- 7. HEALTH CHECK ---
+# --- 7.5 ADMIN DASHBOARD & CRUD ROUTES ---
+
+@app.route('/admin')
+def admin_dashboard():
+    """Renders the admin dashboard with the table of posts."""
+    db = get_db()
+    posts = db.execute('SELECT * FROM posts ORDER BY created_at DESC').fetchall()
+    return render_template('admin.html', posts=posts)
+
+
+@app.route('/admin/new', methods=['GET', 'POST'])
+def new_post():
+    """Handles displaying the 'New Post' page and saving the post."""
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        
+        if title and content:
+            db = get_db()
+            try:
+                db.execute('INSERT INTO posts (title, content) VALUES (?, ?)', (title, content))
+                db.commit()
+                logger.info(f"Created new post: '{title}'")
+                return redirect(url_for('admin_dashboard'))
+            except Exception as e:
+                logger.error(f"Error creating post: {e}")
+                
+    # Renders your new post template
+    return render_template('new_post.html')
+
+
+@app.route('/admin/edit/<int:post_id>', methods=['GET', 'POST'])
+def edit_post(post_id):
+    """Handles retrieving a post to edit and updating its content."""
+    db = get_db()
+    post = db.execute('SELECT * FROM posts WHERE id = ?', (post_id,)).fetchone()
+    
+    if not post:
+        return "Post not found", 404
+        
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        
+        if title and content:
+            try:
+                db.execute('UPDATE posts SET title = ?, content = ? WHERE id = ?', (title, content, post_id))
+                db.commit()
+                logger.info(f"Updated post ID {post_id}: '{title}'")
+                return redirect(url_for('admin_dashboard'))
+            except Exception as e:
+                logger.error(f"Error updating post ID {post_id}: {e}")
+                
+    # Renders your edit template
+    return render_template('edit_post.html', post=post)
+
+
+@app.route('/admin/delete/<int:post_id>', methods=['POST'])
+def delete_post(post_id):
+    """Handles safe deletion of a post via a POST request."""
+    db = get_db()
+    try:
+        db.execute('DELETE FROM posts WHERE id = ?', (post_id,))
+        db.commit()
+        logger.info(f"Deleted post ID {post_id}")
+    except Exception as e:
+        logger.error(f"Failed to delete post ID {post_id}: {e}")
+        
+    return redirect(url_for('admin_dashboard'))
+
+
+# --- 7.6 AUTH ROUTES ---
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Handles admin authentication. Renders templates/login.html."""
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        # Simple dev/testing bypass
+        if username == 'admin' and password == 'admin':
+            session['logged_in'] = True
+            logger.info("Admin user logged in successfully")
+            return redirect(url_for('admin_dashboard'))
+            
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    """Clears the session and redirects to the home console."""
+    session.pop('logged_in', None)
+    logger.info("Admin user logged out")
+    return redirect(url_for('index'))
+
+
+# --- 8. HEALTH CHECK ---
 @app.route('/health')
 def health():
+    try:
+        db = get_db()
+        post_count = db.execute('SELECT COUNT(*) FROM posts').fetchone()[0]
+    except:
+        post_count = -1
+    
     return jsonify({
         "status": "ok",
         "model_loaded": model is not None,
         "db_ok": os.path.exists(app.config['DATABASE']),
-        "archive_ok": os.path.exists(app.config['ARCHIVE_DB'])
+        "archive_ok": os.path.exists(app.config['ARCHIVE_DB']),
+        "posts_count": post_count
     })
 
-# --- 8. INIT ---
+# --- 9. DIRECT RUN (for dev only) ---
 if __name__ == '__main__':
-    with app.app_context():
-        db = get_db()
-        db.execute('CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, title TEXT, content TEXT)')
-        db.commit()
     app.run(debug=True, use_reloader=False)
