@@ -1,29 +1,32 @@
-# MicroPress with Local SmolLM
+# 🗄️ The Archive & The Oracle  
+### Sovereign Intelligence for the Senior Engineer
 
-A secure, lightweight Flask blog engine featuring Markdown support and an offline AI co-writer powered by SmolLM-135M.
+> A terminal-based, local-first AI analyst that queries your private archive with verifiable, grounded responses. Zero cloud dependency. Zero hallucination hand-waving.
 
-## Setup Instructions
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
+[![SmolLM-135M](https://img.shields.io/badge/Model-SmolLM--135M--Instruct-green.svg)](https://huggingface.co/HuggingFaceTB/SmolLM-135M-Instruct)
 
-1. Clone the repository:
-   ```bash
-   git clone git@github.com:ajsbsd/flask-ai-smollm.git
-   cd flask-ai-smollm
+---
 
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
+## 🎯 Why This Exists
 
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
+The AI era is drowning in black-box APIs and unverified outputs. This project proves you can build **verifiable intelligence** that runs entirely on your infrastructure:
 
-    pip install torch transformers accelerate
-    ```
+- 🔐 **Sovereign**: Your data never leaves your kernel
+- 🔍 **Verifiable**: Every AI response cites `[REF: PG #]` from your archive
+- ⚡ **Portable**: Runs on 2 vCPU / 4GB RAM; scales to GPU clusters
+- 🧭 **Transparent**: `--log-level debug` shows exact prompts + token counts
 
-2.  Environment Variables
+---
 
-    ```bash
-    export FLASK_DEBUG="False"
-    export SECRET_KEY="your-random-production-key"
-    python app.py
-    ```
+## 🚀 Quick Start
+
+### Option A: Local Dev
+```bash
+git clone https://github.com/aaron/flask-ai-smollm.git
+cd flask-ai-smollm
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+./run.sh
+# → Open http://localhost:3000

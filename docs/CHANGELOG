@@ -1,0 +1,57 @@
+
+---
+
+### ✅ 3. `CHANGELOG.md` (v0.1.0 Release Notes)
+
+```markdown
+# Changelog
+
+## [0.1.0] - 2026-05-27
+
+### 🎉 Initial Release: "The Archive & The Oracle"
+
+#### ✅ Features
+- Terminal-based UI with command dispatch (`ls`, `cat`, `search`, `ai`, `whoami`)
+- BM25 full-text search over SQLite FTS5 archive (`imperium_archive.db`)
+- Local LLM inference: SmolLM-135M-Instruct on CPU (~230MB RAM)
+- RAG context injection: `search` results ground `ai` responses
+- Rate limiting: 30 req/min on `/api/exec` via Flask-Limiter
+- Observability: Debug logs + `/health` endpoint
+- Session management: `last_search` persistence for grounded Q&A
+
+#### ⚙️ Infrastructure
+- Gunicorn + gthread workers (1 worker, 2 threads for CPU efficiency)
+- Flask blueprint structure ready for expansion
+- Docker-ready design (Dockerfile coming in v0.2)
+
+#### 🧪 Testing
+- Syntax validation: `python -m py_compile app.py`
+- Health endpoint: `GET /health`
+- Rate limit smoke test included in README
+
+#### 🔐 Security
+- Session cookies hardened (`HttpOnly`, `SameSite=Lax`)
+- Rate limiting prevents abuse of inference endpoint
+- No external network calls during inference (sovereign by design)
+
+#### 📚 Documentation
+- Comprehensive README with demo flow
+- Architecture overview in `docs/ARCHITECTURE.md` (draft)
+- Deployment guide in `docs/DEPLOY.md` (draft)
+
+### 🚧 Known Limitations (v0.1)
+- CPU inference latency: ~15-20s for 150 tokens (SmolLM-135M)
+- Session persistence requires cookie support in client browser
+- No HTTPS built-in (use reverse proxy for production)
+- Model quantization not yet implemented (full float32 weights)
+
+### 🔜 Coming in v0.2
+- [ ] GGUF quantization support (llama-cpp-python) for 3x faster CPU inference
+- [ ] Dockerfile + docker-compose.yml for one-command deploy
+- [ ] `/metrics` endpoint (Prometheus-style counters)
+- [ ] Streaming token responses (SSE) for perceived latency reduction
+- [ ] Multi-user session isolation improvements
+
+---
+
+*Release engineered by Aaron Summers | ajsbsd@gmail.com | ajsbsd.net | Senior Systems Engineer*
