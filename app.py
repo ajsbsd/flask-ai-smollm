@@ -68,6 +68,9 @@ class Config:
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    #
+    ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
+    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
 
 # --- 3. APP INITIALIZATION ---
 app = Flask(__name__)
@@ -77,7 +80,7 @@ app.config.from_object(Config)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["100 per hour", "10 per minute"],
+    default_limits=["200 per hour", "20 per minute"],
     storage_uri="memory://"
 )
 
@@ -347,14 +350,17 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         
-        # Simple dev/testing bypass
-        if username == 'admin' and password == 'admin':
+        expected_username = current_app.config.get('ADMIN_USERNAME', 'admin')
+        expected_password = current_app.config.get('ADMIN_PASSWORD', 'admin')
+        
+        if username == expected_username and password == expected_password:
             session['logged_in'] = True
             logger.info("Admin user logged in successfully")
             return redirect(url_for('admin_dashboard'))
+        else:
+            logger.warning("Failed admin login attempt")
             
     return render_template('login.html')
-
 
 @app.route('/logout')
 def logout():
