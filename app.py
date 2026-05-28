@@ -9,7 +9,7 @@ import threading
 
 # === THIRD-PARTY ===
 import markdown
-from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for
+from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for, render_template_string
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -33,6 +33,7 @@ if not logger.handlers:
 
 # --- 1. AI SETUP (Qwen3-0.6B-Instruct GGUF via Unsloth) ---
 print("Initializing system...")
+# We use the highly optimized Qwen3-0.6B GGUF 4-bit model from Unsloth
 GGUF_REPO = "unsloth/Qwen3-0.6B-GGUF"
 GGUF_FILE = "Qwen3-0.6B-Q4_K_M.gguf"
 
@@ -68,7 +69,7 @@ class Config:
     SESSION_COOKIE_SECURE = False
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    #
+    # Admin Credentials
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
 
@@ -105,6 +106,8 @@ def init_db():
     with app.app_context():
         try:
             db = get_db()
+            
+            # Posts table
             db.execute('''
                 CREATE TABLE IF NOT EXISTS posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +117,18 @@ def init_db():
             ''')
             db.commit()
             
-            # Auto-migration: ensure created_at column is present
+            # Contacts table for storing contact command submissions
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS contacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            db.commit()
+            
+            # Auto-migration: ensure created_at column is present on posts
             try:
                 db.execute('ALTER TABLE posts ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
                 db.commit()
@@ -153,7 +167,7 @@ def execute():
 
     # --- COMMANDS ---
     if cmd == 'help':
-        return jsonify(output="Available: ls, cat [id], search [term], ai [prompt], clear, whoami")
+        return jsonify(output="Available: ls, cat [id], search [term], ai [prompt], contact [email] [message], clear, whoami")
 
     elif cmd == 'ls':
         posts = db.execute('SELECT id, title FROM posts').fetchall()
@@ -262,6 +276,35 @@ USER QUESTION: {args}"""
         
         return jsonify(output=f"ORACLE> {generated.strip()}{suffix}")
 
+    elif cmd == 'contact':
+        if not args:
+            return jsonify(output="Usage: contact <email> <your message>\nExample: contact aaron@ajsbsd.net Hi, love the site!")
+            
+        # Split the email (first argument) from the rest of the message
+        parts = args.split(' ', 1)
+        email = parts[0].strip()
+        
+        # Mandatory Email Validation using standard Regex
+        email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+        if not re.match(email_regex, email):
+            return jsonify(output="Error: A valid email address is mandatory.\nUsage: contact <email> <message>")
+            
+        # Verify that a message actually follows the email
+        if len(parts) < 2 or not parts[1].strip():
+            return jsonify(output="Error: Message content cannot be empty.\nUsage: contact <email> <message>")
+            
+        message = parts[1].strip()
+        
+        # Save the contact submission safely to the SQLite database
+        try:
+            db.execute('INSERT INTO contacts (email, message) VALUES (?, ?)', (email, message))
+            db.commit()
+            logger.info(f"New contact submission registered from: {email}")
+            return jsonify(output="SYSTEM> Connection established. Message successfully logged to database.")
+        except Exception as e:
+            logger.error(f"Failed to log contact message: {e}")
+            return jsonify(output=f"SYSTEM ERROR: Transmission failed. {e}")
+
     elif cmd == 'clear':
         return jsonify(action='clear')
 
@@ -273,14 +316,16 @@ USER QUESTION: {args}"""
 # --- 7.5 ADMIN DASHBOARD & CRUD ROUTES ---
 
 @app.route('/admin')
+@limiter.exempt  # Exempt admin routes from rate limits to prevent lockout during heavy dev sessions
 def admin_dashboard():
-    """Renders the admin dashboard with the table of posts."""
+    """Renders the admin dashboard with the table of posts and contact messages on a single page."""
     db = get_db()
     posts = db.execute('SELECT * FROM posts ORDER BY created_at DESC').fetchall()
-    return render_template('admin.html', posts=posts)
-
+    messages = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()  # <--- Added
+    return render_template('admin.html', posts=posts, messages=messages)                # <--- Added
 
 @app.route('/admin/new', methods=['GET', 'POST'])
+@limiter.exempt
 def new_post():
     """Handles displaying the 'New Post' page and saving the post."""
     if request.method == 'POST':
@@ -302,6 +347,7 @@ def new_post():
 
 
 @app.route('/admin/edit/<int:post_id>', methods=['GET', 'POST'])
+@limiter.exempt
 def edit_post(post_id):
     """Handles retrieving a post to edit and updating its content."""
     db = get_db()
@@ -328,6 +374,7 @@ def edit_post(post_id):
 
 
 @app.route('/admin/delete/<int:post_id>', methods=['POST'])
+@limiter.exempt
 def delete_post(post_id):
     """Handles safe deletion of a post via a POST request."""
     db = get_db()
@@ -341,9 +388,56 @@ def delete_post(post_id):
     return redirect(url_for('admin_dashboard'))
 
 
+@app.route('/admin/messages')
+@limiter.exempt
+def admin_messages():
+    """Renders contact us submissions directly using an inline Jinja string layout."""
+    db = get_db()
+    messages = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()
+    
+    html_content = """
+    {% extends "base.html" %}
+    {% block title %}Messages - MicroPress{% endblock %}
+    {% block content %}
+    <section>
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>Contact Us Messages</h2>
+            <a href="{{ url_for('admin_dashboard') }}" class="button outline">Back to Dashboard</a>
+        </header>
+        <table class="striped">
+            <thead>
+                <tr>
+                    <th scope="col" style="width: 25%;">Email</th>
+                    <th scope="col" style="width: 20%;">Date Submitted</th>
+                    <th scope="col" style="width: 55%;">Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if messages %}
+                    {% for msg in messages %}
+                        <tr>
+                            <td><strong><a href="mailto:{{ msg['email'] }}">{{ msg['email'] }}</a></strong></td>
+                            <td>{{ msg['created_at'] }}</td>
+                            <td style="white-space: pre-wrap;">{{ msg['message'] }}</td>
+                        </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center;">No contact submissions yet.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </section>
+    {% endblock %}
+    """
+    return render_template_string(html_content, messages=messages)
+
+
 # --- 7.6 AUTH ROUTES ---
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.exempt
 def login():
     """Handles admin authentication. Renders templates/login.html."""
     if request.method == 'POST':
@@ -363,6 +457,7 @@ def login():
     return render_template('login.html')
 
 @app.route('/logout')
+@limiter.exempt
 def logout():
     """Clears the session and redirects to the home console."""
     session.pop('logged_in', None)
@@ -372,6 +467,7 @@ def logout():
 
 # --- 8. HEALTH CHECK ---
 @app.route('/health')
+@limiter.exempt
 def health():
     try:
         db = get_db()

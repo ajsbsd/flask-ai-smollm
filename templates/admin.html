@@ -2,6 +2,7 @@
 {% block title %}Dashboard - MicroPress{% endblock %}
 {% block content %}
 <section>
+    <!-- 1. POSTS TABLE -->
     <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2>Admin Dashboard</h2>
         <a href="{{ url_for('new_post') }}" class="button">Create New Post</a>
@@ -34,6 +35,37 @@
             {% else %}
                 <tr>
                     <td colspan="3" style="text-align: center;">No posts found. Create your first post!</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</section>
+
+<!-- 2. CONTACT US MESSAGES SECTION -->
+<section style="margin-top: 50px; border-top: 1px solid #e1e4e8; padding-top: 30px;">
+    <header style="margin-bottom: 20px;">
+        <h2>Contact Us Messages</h2>
+    </header>
+    <table class="striped">
+        <thead>
+            <tr>
+                <th scope="col" style="width: 25%;">Email</th>
+                <th scope="col" style="width: 20%;">Date Submitted</th>
+                <th scope="col" style="width: 55%;">Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if messages %}
+                {% for msg in messages %}
+                    <tr>
+                        <td><strong><a href="mailto:{{ msg['email'] }}">{{ msg['email'] }}</a></strong></td>
+                        <td>{{ msg['created_at'] }}</td>
+                        <td style="white-space: pre-wrap;">{{ msg['message'] }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="3" style="text-align: center;">No contact submissions yet.</td>
                 </tr>
             {% endif %}
         </tbody>
