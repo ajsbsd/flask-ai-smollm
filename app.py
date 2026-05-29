@@ -19,6 +19,12 @@ from markupsafe import Markup
 
 # === OPTIONAL DEPENDENCIES ===
 try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Explicitly inject .env values into os.environ for Gunicorn
+except ImportError:
+    pass
+
+try:
     import bleach
     BLEACH_AVAILABLE = True
 except ImportError:
@@ -63,25 +69,41 @@ def load_ai():
 
 # --- 2. CONFIG ---
 class Config:
-    # Ensure production deployments fail safely if a production-grade secret key is missing
-    SECRET_KEY = os.environ.get('SECRET_KEY')
-    if not SECRET_KEY:
-        is_dev = os.environ.get('FLASK_DEBUG') in ['1', 'True', 'true'] or os.environ.get('FLASK_ENV') == 'development'
-        if not is_dev:
-            raise RuntimeError("CRITICAL SECURITY ERROR: The SECRET_KEY environment variable must be set in production.")
-        else:
-            logger.warning("WARNING: No SECRET_KEY set. Falling back to insecure development key.")
-            SECRET_KEY = 'dev_key_892301823091_insecure_fallback'
-
     DATABASE = 'micropress.db'
     ARCHIVE_DB = 'imperium_archive.db'
     DEBUG = True
     SESSION_COOKIE_SECURE = False  # Set to True if deploying on HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    # Admin Credentials
+    
+    # Secure Session Key management
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        is_dev = os.environ.get('FLASK_DEBUG') in ['1', 'True', 'true'] or os.environ.get('FLASK_ENV') == 'development'
+        if is_dev:
+            logger.warning("WARNING: No SECRET_KEY set. Falling back to insecure development key.")
+            SECRET_KEY = 'dev_key_892301823091_insecure_fallback'
+        else:
+            logger.warning("WARNING: SECRET_KEY environment variable not found. Generating a secure transient key.")
+            SECRET_KEY = secrets.token_hex(32)
+
+    # Admin Credentials Setup
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '033e6304da')
+    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
+    
+    if not ADMIN_PASSWORD:
+        is_dev = os.environ.get('FLASK_DEBUG') in ['1', 'True', 'true'] or os.environ.get('FLASK_ENV') == 'development'
+        if is_dev:
+            logger.warning("WARNING: ADMIN_PASSWORD not set. Falling back to development default: 'admin'")
+            ADMIN_PASSWORD = 'admin'
+        else:
+            # Generate a secure transient admin password on boot so there is no hardcoded backdoor
+            ADMIN_PASSWORD = secrets.token_hex(16)
+            print("\n" + "=" * 70)
+            print("SECURITY WARNING: ADMIN_PASSWORD environment variable not found.")
+            print(f"GENERATED TRANSIENT ADMIN PASSWORD FOR THIS LIFECYCLE:\n{ADMIN_PASSWORD}")
+            print("=" * 70 + "\n")
+            logger.info("Generated secure transient admin password for Gunicorn lifecycle.")
 
 # --- 3. APP INITIALIZATION ---
 app = Flask(__name__)
@@ -482,23 +504,40 @@ def admin_messages():
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.exempt
 def login():
-    """Handles admin authentication. Renders templates/login.html."""
+    """Handles admin authentication securely supporting both raw text and hashes."""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         
+        # Pull values securely from the running application config
         expected_username = current_app.config.get('ADMIN_USERNAME', 'admin')
-        expected_password = current_app.config.get('ADMIN_PASSWORD', 'admin')
+        expected_password = current_app.config.get('ADMIN_PASSWORD')
         
-        if username == expected_username and password == expected_password:
-            session['logged_in'] = True
-            logger.info("Admin user logged in successfully")
-            return redirect(url_for('admin_dashboard'))
+        if not expected_password:
+            logger.error("Authentication attempted, but no credential store is configured.")
+            return render_template('login.html', error="System configuration error.")
+
+        # Inspect if the expected password is a Werkzeug hash signature
+        is_hashed = expected_password.startswith(('pbkdf2:', 'scrypt:', 'bcrypt:')) if expected_password else False
+        
+        if username == expected_username:
+            if is_hashed:
+                password_correct = check_password_hash(expected_password, password)
+            else:
+                password_correct = (password == expected_password)
+                
+            if password_correct:
+                session['logged_in'] = True
+                logger.info("Admin user logged in successfully.")
+                return redirect(url_for('admin_dashboard'))
+            else:
+                logger.warning("Failed admin login attempt (incorrect password).")
         else:
-            logger.warning("Failed admin login attempt")
+            logger.warning("Failed admin login attempt (incorrect username).")
             
     return render_template('login.html')
 
+# --- 11. HEALTH CHECK ---
 @app.route('/logout')
 @limiter.exempt
 def logout():
@@ -507,8 +546,6 @@ def logout():
     logger.info("Admin user logged out")
     return redirect(url_for('index'))
 
-
-# --- 11. HEALTH CHECK ---
 @app.route('/health')
 @limiter.exempt
 def health():
