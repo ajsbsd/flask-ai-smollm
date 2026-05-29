@@ -6,10 +6,12 @@ import secrets
 import re
 import logging
 import threading
+import time
+from functools import wraps
 
 # === THIRD-PARTY ===
 import markdown
-from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for, render_template_string
+from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for, render_template_string, abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -31,11 +33,10 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.DEBUG)
 
-# --- 1. AI SETUP (Qwen3-0.6B-Instruct GGUF via Unsloth) ---
+# --- 1. AI SETUP (SmolLM2-360M-Instruct GGUF via Unsloth) ---
 print("Initializing system...")
-# We use the highly optimized Qwen3-0.6B GGUF 4-bit model from Unsloth
-GGUF_REPO = "unsloth/Qwen3-0.6B-GGUF"
-GGUF_FILE = "Qwen3-0.6B-Q4_K_M.gguf"
+GGUF_REPO = "unsloth/SmolLM2-360M-Instruct-GGUF"
+GGUF_FILE = "SmolLM2-360M-Instruct-Q4_K_M.gguf"
 
 # Global thread lock and model pointer
 ai_lock = threading.Lock()
@@ -48,30 +49,39 @@ def load_ai():
             from llama_cpp import Llama
             from huggingface_hub import hf_hub_download
             
-            logger.info("Downloading/loading Qwen3 GGUF model...")
+            logger.info("Downloading/loading SmolLM2 GGUF model...")
             model_path = hf_hub_download(repo_id=GGUF_REPO, filename=GGUF_FILE)
             
             model = Llama(
                 model_path=model_path,
-                n_ctx=2048,
-                n_threads=4,
+                n_ctx=2048,  # SmolLM2 supports up to 8192 context size, but 2048 is faster on CPU
+                n_threads=1,
                 n_gpu_layers=0,
                 verbose=False
             )
-            print("AI Model loaded (Qwen3-0.6B GGUF 4-bit) on CPU")
+            print("AI Model loaded (SmolLM2-360M-Instruct GGUF 4-bit) on CPU")
 
 # --- 2. CONFIG ---
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev_key_892301823091')
+    # Ensure production deployments fail safely if a production-grade secret key is missing
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        is_dev = os.environ.get('FLASK_DEBUG') in ['1', 'True', 'true'] or os.environ.get('FLASK_ENV') == 'development'
+        if not is_dev:
+            raise RuntimeError("CRITICAL SECURITY ERROR: The SECRET_KEY environment variable must be set in production.")
+        else:
+            logger.warning("WARNING: No SECRET_KEY set. Falling back to insecure development key.")
+            SECRET_KEY = 'dev_key_892301823091_insecure_fallback'
+
     DATABASE = 'micropress.db'
     ARCHIVE_DB = 'imperium_archive.db'
     DEBUG = True
-    SESSION_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = False  # Set to True if deploying on HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     # Admin Credentials
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
+    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '033e6304da')
 
 # --- 3. APP INITIALIZATION ---
 app = Flask(__name__)
@@ -85,7 +95,27 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# --- 5. DATABASE HELPER ---
+# --- 5. DECORATORS & SECURITY HELPERS ---
+def login_required(f):
+    """Restricts route access to users with active admin sessions."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            # Return appropriate response type based on the request pathway
+            if request.path.startswith('/api/'):
+                return jsonify(output="Error: Unauthorized. Admin session required."), 401
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def sanitize_input(text):
+    """Sanitizes text content to mitigate XSS risks before database storage."""
+    if BLEACH_AVAILABLE and text:
+        # Strip all HTML tags entirely for plain-text storage safety
+        return bleach.clean(text, tags=[], strip=True)
+    return text
+
+# --- 6. DATABASE HELPER ---
 def get_db():
     db = getattr(g, '_database', None)
     if db is None:
@@ -100,7 +130,7 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
-# --- 6. APP STARTUP: Ensure DB schema exists ---
+# --- 7. APP STARTUP: Ensure DB schema exists ---
 def init_db():
     """Create tables if they don't exist and automatically migrate schema."""
     with app.app_context():
@@ -145,7 +175,7 @@ def init_db():
 init_db()
 load_ai()
 
-# --- 7. TERMINAL API ---
+# --- 8. TERMINAL API ---
 @app.route('/')
 def index():
     """Renders the interactive terminal console."""
@@ -155,7 +185,7 @@ def index():
 @limiter.limit("30 per minute")
 def execute():
     """Main terminal command dispatcher."""
-    data = request.get_json()
+    data = request.get_json() or {}
     raw_input = data.get('command', '').strip()
     if not raw_input:
         return jsonify(output="")
@@ -208,6 +238,15 @@ def execute():
             search_db.close()
 
     elif cmd == 'ai':
+        # === SPECIFIC RATE LIMIT (COOLDOWN) ===
+        # Restrict AI command execution to once every 5 seconds to manage CPU strain
+        last_ai_time = session.get('last_ai_time', 0.0)
+        now = time.time()
+        if now - last_ai_time < 5.0:
+            cooldown_remaining = int(5.0 - (now - last_ai_time))
+            return jsonify(output=f"SYSTEM> Cooldown active. Please wait {cooldown_remaining} seconds before querying the AI again.")
+        session['last_ai_time'] = now
+
         logger.debug(f"Generating response for prompt: {args[:100]}...")
         load_ai()
         
@@ -244,19 +283,19 @@ USER QUESTION: {args}"""
         # === MODEL GENERATION ===
         messages = [{"role": "user", "content": system_prompt}]
         
-        # Qwen3 GGUF automatically handles ChatML structures behind the scenes 
-        # using the create_chat_completion API.
-        response = model.create_chat_completion(
-            messages=messages,
-            max_tokens=512,  # Increased to 512 to give reasoning engine space to think and answer
-            temperature=0.3,
-            repeat_penalty=1.2,
-            stop=["<|im_end|>"]
-        )
+        # Serialize model invocation to prevent threading/CPU race conditions inside llama-cpp
+        with ai_lock:
+            response = model.create_chat_completion(
+                messages=messages,
+                max_tokens=150,
+                temperature=0.2,
+                repeat_penalty=1.2,
+                stop=["<|im_end|>", "\n\n"]
+            )
         
         generated = response['choices'][0]['message']['content']
         
-        # Extract and hide the thinking block for a cleaner terminal output
+        # Extract and hide thinking block (kept as a safety mechanism)
         if "<think>" in generated and "</think>" in generated:
             parts = generated.split("</think>")
             thoughts = parts[0].replace("<think>", "").strip()
@@ -278,7 +317,7 @@ USER QUESTION: {args}"""
 
     elif cmd == 'contact':
         if not args:
-            return jsonify(output="Usage: contact <email> <your message>\nExample: contact aaron@ajsbsd.net Hi, love the site!")
+            return jsonify(output="Usage: contact <email> <your message>\nExample: contact ajsbsd@gmail.com Hi, love the site!")
             
         # Split the email (first argument) from the rest of the message
         parts = args.split(' ', 1)
@@ -293,7 +332,8 @@ USER QUESTION: {args}"""
         if len(parts) < 2 or not parts[1].strip():
             return jsonify(output="Error: Message content cannot be empty.\nUsage: contact <email> <message>")
             
-        message = parts[1].strip()
+        # Sanitize message inputs
+        message = sanitize_input(parts[1].strip())
         
         # Save the contact submission safely to the SQLite database
         try:
@@ -309,28 +349,30 @@ USER QUESTION: {args}"""
         return jsonify(action='clear')
 
     elif cmd == 'whoami':
-        return jsonify(output="aaron@ajsbsd.net (Senior Systems Engineer)")
+        return jsonify(output="ajsbsd@gmail.com (Senior Linux Engineer)")
 
     return jsonify(output=f"sh: command not found: {cmd}")
 
-# --- 7.5 ADMIN DASHBOARD & CRUD ROUTES ---
+# --- 9. ADMIN DASHBOARD & CRUD ROUTES ---
 
 @app.route('/admin')
 @limiter.exempt  # Exempt admin routes from rate limits to prevent lockout during heavy dev sessions
+@login_required
 def admin_dashboard():
     """Renders the admin dashboard with the table of posts and contact messages on a single page."""
     db = get_db()
     posts = db.execute('SELECT * FROM posts ORDER BY created_at DESC').fetchall()
-    messages = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()  # <--- Added
-    return render_template('admin.html', posts=posts, messages=messages)                # <--- Added
+    messages = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()
+    return render_template('admin.html', posts=posts, messages=messages)
 
 @app.route('/admin/new', methods=['GET', 'POST'])
 @limiter.exempt
+@login_required
 def new_post():
     """Handles displaying the 'New Post' page and saving the post."""
     if request.method == 'POST':
-        title = request.form.get('title', '').strip()
-        content = request.form.get('content', '').strip()
+        title = sanitize_input(request.form.get('title', '').strip())
+        content = sanitize_input(request.form.get('content', '').strip())
         
         if title and content:
             db = get_db()
@@ -342,23 +384,23 @@ def new_post():
             except Exception as e:
                 logger.error(f"Error creating post: {e}")
                 
-    # Renders your new post template
     return render_template('new_post.html')
 
 
 @app.route('/admin/edit/<int:post_id>', methods=['GET', 'POST'])
 @limiter.exempt
+@login_required
 def edit_post(post_id):
     """Handles retrieving a post to edit and updating its content."""
     db = get_db()
     post = db.execute('SELECT * FROM posts WHERE id = ?', (post_id,)).fetchone()
     
     if not post:
-        return "Post not found", 404
+        abort(404, description="Post not found")
         
     if request.method == 'POST':
-        title = request.form.get('title', '').strip()
-        content = request.form.get('content', '').strip()
+        title = sanitize_input(request.form.get('title', '').strip())
+        content = sanitize_input(request.form.get('content', '').strip())
         
         if title and content:
             try:
@@ -369,12 +411,12 @@ def edit_post(post_id):
             except Exception as e:
                 logger.error(f"Error updating post ID {post_id}: {e}")
                 
-    # Renders your edit template
     return render_template('edit_post.html', post=post)
 
 
 @app.route('/admin/delete/<int:post_id>', methods=['POST'])
 @limiter.exempt
+@login_required
 def delete_post(post_id):
     """Handles safe deletion of a post via a POST request."""
     db = get_db()
@@ -390,6 +432,7 @@ def delete_post(post_id):
 
 @app.route('/admin/messages')
 @limiter.exempt
+@login_required
 def admin_messages():
     """Renders contact us submissions directly using an inline Jinja string layout."""
     db = get_db()
@@ -434,7 +477,7 @@ def admin_messages():
     return render_template_string(html_content, messages=messages)
 
 
-# --- 7.6 AUTH ROUTES ---
+# --- 10. AUTH ROUTES ---
 
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.exempt
@@ -465,14 +508,15 @@ def logout():
     return redirect(url_for('index'))
 
 
-# --- 8. HEALTH CHECK ---
+# --- 11. HEALTH CHECK ---
 @app.route('/health')
 @limiter.exempt
 def health():
     try:
         db = get_db()
         post_count = db.execute('SELECT COUNT(*) FROM posts').fetchone()[0]
-    except:
+    except Exception as e:
+        logger.error(f"Health check failed to query database: {e}")
         post_count = -1
     
     return jsonify({
@@ -483,6 +527,6 @@ def health():
         "posts_count": post_count
     })
 
-# --- 9. DIRECT RUN (for dev only) ---
+# --- 12. DIRECT RUN (for dev only) ---
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
