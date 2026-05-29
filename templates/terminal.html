@@ -2,108 +2,158 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>ajsbsd.net public terminal v1.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Terminal Console</title>
     <style>
         body {
-            background-color: #0a0a0a;
-            color: #00ff41; /* Classic Matrix/Terminal Green */
+            background-color: #0c0c0c;
+            color: #33ff33;
             font-family: 'Courier New', Courier, monospace;
+            margin: 0;
             padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 95vh;
             overflow: hidden;
         }
         #terminal {
-            height: 85vh;
+            flex-grow: 1;
             overflow-y: auto;
-            border: 1px solid #333;
-            padding: 15px;
-            background: rgba(0, 0, 0, 0.9);
-            box-shadow: inset 0 0 10px #000;
+            margin-bottom: 20px;
+            padding-right: 10px;
         }
-        #input-line {
+        .output-line {
+            white-space: pre-wrap;
+            margin: 4px 0;
+            line-height: 1.4;
+        }
+        .prompt-line {
             display: flex;
-            margin-top: 10px;
+            align-items: center;
+            margin-top: 5px;
         }
-        .prompt { color: #00ff41; font-weight: bold; margin-right: 10px; }
-        input {
+        .prompt {
+            color: #33ff33;
+            margin-right: 10px;
+            user-select: none;
+        }
+        #command-input {
             background: transparent;
             border: none;
-            color: #fff;
-            font-family: inherit;
-            font-size: 1rem;
+            color: #33ff33;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+            flex-grow: 1;
             outline: none;
-            width: 100%;
+            caret-color: #33ff33;
         }
-        .output-block { margin-bottom: 10px; white-space: pre-wrap; }
-        .system-msg { color: #888; font-style: italic; }
-        /* CRT Scanline Effect */
-        #terminal::before {
-            content: " ";
-            display: block;
-            position: absolute;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 2;
-            background-size: 100% 2px, 3px 100%;
-            pointer-events: none;
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #33ff33;
+            border-radius: 4px;
         }
     </style>
 </head>
 <body>
+    <div id="terminal">
+        <!-- Render system MOTD banner if this is the user's first visit [2] -->
+        {% if show_motd %}
+        <div class="output-line" style="color: #33ff33;">======================================================================
+* Sovereign OS v0.6 - SYSTEM MESSAGE OF THE DAY (MOTD) *
+======================================================================
+Welcome to the workspace of Aaron (Senior Linux Engineer).
 
-<div id="terminal">
-    <div class="output-block system-msg">
-	Linux ajsbsd.net 6.8.0-117-generic #117-Ubuntu SMP PREEMPT_DYNAMIC Tue May  5 19:26:24 UTC 2026<br>
-	AI_MODEL: SmolLM2-360M-Instruct GGUF via Unsloth<br>
-        Type 'help' to begin.
+To establish communication or submit direct inquiries:
+- EMAIL: ajsbsd@gmail.com
+- SHELL: Run the 'contact &lt;email&gt; &lt;message&gt;' command directly 
+         from this terminal console.
+         
+* Type 'help' to view all available shell subcommands.
+======================================================================</div>
+        {% endif %}
+        <div class="output-line">Sovereign OS v0.6 (Console Initialized)</div>
+        <div class="output-line">Type 'help' for system subcommands.</div>
     </div>
-    <div id="history"></div>
-    <div id="input-line">
+    <div class="prompt-line">
         <span class="prompt">guest@ajsbsd:~$</span>
-        <input type="text" id="cmd-input" autofocus autocomplete="off">
+        <input type="text" id="command-input" autofocus autocomplete="off" spellcheck="false">
     </div>
-</div>
 
-<script>
-    const input = document.getElementById('cmd-input');
-    const history = document.getElementById('history');
-    const terminal = document.getElementById('terminal');
+    <script>
+        const terminal = document.getElementById('terminal');
+        const input = document.getElementById('command-input');
+        let currentPrompt = "guest@ajsbsd:~$";
 
-    input.addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter') {
-            const command = input.value;
-            input.value = '';
-            
-            // Add to UI history
-            appendOutput(`guest@ajsbsd:~$ ${command}`, 'prompt');
+        // Keeps cursor focus on command-line click
+        document.body.addEventListener('click', () => {
+            input.focus();
+        });
 
-            // Send to Backend
-            const response = await fetch('/api/exec', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ command: command })
-            });
-            const data = await response.json();
-
-            if (data.action === 'clear') {
-                history.innerHTML = '';
+        function appendLine(text, isCommand = false, promptSymbol = "") {
+            const line = document.createElement('div');
+            line.className = 'output-line';
+            if (isCommand) {
+                line.innerHTML = `<span style="color: #33ff33;">${promptSymbol}</span> ${text}`;
             } else {
-                appendOutput(data.output);
+                line.textContent = text;
             }
+            terminal.appendChild(line);
             terminal.scrollTop = terminal.scrollHeight;
         }
-    });
 
-    function appendOutput(text, className = 'output-block') {
-        const div = document.createElement('div');
-        div.className = className;
-        div.innerText = text;
-        history.appendChild(div);
-    }
-    
-    // Auto-focus input on click anywhere
-    document.addEventListener('click', () => input.focus());
-</script>
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const command = input.value.trim();
+                input.value = '';
 
+                if (!command) return;
+
+                appendLine(command, true, currentPrompt);
+
+                fetch('/api/exec', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ command: command })
+                })
+                .then(response => {
+                    if (response.status === 401) {
+                        return { output: "Error: Unauthorized. Login required." };
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.action === 'clear') {
+                        terminal.innerHTML = '';
+                    } else if (data.action === 'startx') {
+                        if (data.output) {
+                            appendLine(data.output);
+                        }
+                        // Satisfying retro loading delay
+                        setTimeout(() => {
+                            window.location.href = data.url;
+                        }, 1000);
+                    } else if (data.action === 'redirect') {
+                        window.location.href = data.url;
+                    } else {
+                        if (data.output) {
+                            appendLine(data.output);
+                        }
+                    }
+                })
+                .catch(err => {
+                    appendLine("SYSTEM ERROR: Failed to communicate with kernel.");
+                    console.error(err);
+                });
+            }
+        });
+    </script>
 </body>
 </html>

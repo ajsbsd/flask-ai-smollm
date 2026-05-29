@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Messages - MicroPress{% endblock %}
+{% block content %}
+<section>
+    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Contact Us Messages</h2>
+        <a href="{{ url_for('admin_dashboard') }}" class="button outline">Back to Dashboard</a>
+    </header>
+    <table class="striped">
+        <thead>
+            <tr>
+                <th scope="col" style="width: 25%;">Email</th>
+                <th scope="col" style="width: 20%;">Date Submitted</th>
+                <th scope="col" style="width: 55%;">Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if messages %}
+                {% for msg in messages %}
+                    <tr>
+                        <td><strong><a href="mailto:{{ msg['email'] }}">{{ msg['email'] }}</a></strong></td>
+                        <td>{{ msg['created_at'] }}</td>
+                        <td style="white-space: pre-wrap;">{{ msg['message'] }}</td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="3" style="text-align: center;">No contact submissions yet.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

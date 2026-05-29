@@ -11,7 +11,7 @@ from functools import wraps
 
 # === THIRD-PARTY ===
 import markdown
-from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for, render_template_string, abort
+from flask import Flask, render_template, request, session, g, jsonify, current_app, redirect, url_for, abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -118,17 +118,25 @@ limiter = Limiter(
 )
 
 # --- 5. DECORATORS & SECURITY HELPERS ---
-def login_required(f):
-    """Restricts route access to users with active admin sessions."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
-            # Return appropriate response type based on the request pathway
-            if request.path.startswith('/api/'):
-                return jsonify(output="Error: Unauthorized. Admin session required."), 401
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+def login_required(role='user'):
+    """Restricts route access based on active role ('admin' or 'user')."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not session.get('user_id'):
+                if request.path.startswith('/api/'):
+                    return jsonify(output="Error: Unauthorized. Login required."), 401
+                return redirect(url_for('login'))
+            
+            current_role = session.get('role', 'user')
+            if role == 'admin' and current_role != 'admin':
+                if request.path.startswith('/api/'):
+                    return jsonify(output="Error: Forbidden. Admin permissions required."), 403
+                abort(403)
+                
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 def sanitize_input(text):
     """Sanitizes text content to mitigate XSS risks before database storage."""
@@ -159,7 +167,49 @@ def init_db():
         try:
             db = get_db()
             
-            # Posts table
+            # 1. Users table (Supports both admin and messaging users)
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'user',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            db.commit()
+
+            # 2. Seed default system admin if missing from SQLite
+            admin_user = app.config['ADMIN_USERNAME']
+            raw_pass = app.config['ADMIN_PASSWORD']
+            
+            if not raw_pass.startswith(('pbkdf2:', 'scrypt:', 'bcrypt:')):
+                hashed_pass = generate_password_hash(raw_pass)
+            else:
+                hashed_pass = raw_pass
+
+            admin_exists = db.execute('SELECT 1 FROM users WHERE username = ?', (admin_user,)).fetchone()
+            if not admin_exists:
+                db.execute(
+                    'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
+                    (admin_user, hashed_pass, 'admin')
+                )
+                db.commit()
+                logger.info(f"Seeded default administrator profile: '{admin_user}'")
+
+            # 3. Direct Messages table (Communications database)
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS direct_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sender_username TEXT NOT NULL,
+                    receiver_username TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            db.commit()
+
+            # 4. Posts table
             db.execute('''
                 CREATE TABLE IF NOT EXISTS posts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,7 +219,7 @@ def init_db():
             ''')
             db.commit()
             
-            # Contacts table for storing contact command submissions
+            # 5. Contacts table for storing contact command submissions
             db.execute('''
                 CREATE TABLE IF NOT EXISTS contacts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,7 +236,6 @@ def init_db():
                 db.commit()
                 logger.info("Applied migration: created_at column ensured")
             except sqlite3.OperationalError:
-                # Column already exists, safe to ignore
                 pass
                 
             logger.info("Database schema initialized")
@@ -200,8 +249,11 @@ load_ai()
 # --- 8. TERMINAL API ---
 @app.route('/')
 def index():
-    """Renders the interactive terminal console."""
-    return render_template('terminal.html')
+    """Renders the interactive terminal console with transient MOTD checks [2]."""
+    show_motd = not session.get('terminal_motd_shown', False)
+    if show_motd:
+        session['terminal_motd_shown'] = True # Block subsequent load displays [2]
+    return render_template('terminal.html', show_motd=show_motd)
 
 @app.route('/api/exec', methods=['POST'])
 @limiter.limit("30 per minute")
@@ -212,14 +264,14 @@ def execute():
     if not raw_input:
         return jsonify(output="")
 
+    db = get_db()
     parts = raw_input.split(' ')
     cmd = parts[0].lower()
     args = " ".join(parts[1:])
-    db = get_db()
 
     # --- COMMANDS ---
     if cmd == 'help':
-        return jsonify(output="Available: ls, cat [id], search [term], ai [prompt], contact [email] [message], clear, whoami")
+        return jsonify(output="Available: ls, cat [id], search [term], ai [prompt], contact [email] [message], startx, motd, clear, whoami")
 
     elif cmd == 'ls':
         posts = db.execute('SELECT id, title FROM posts').fetchall()
@@ -248,7 +300,6 @@ def execute():
             if not results:
                 return jsonify(output="No matches found in research archive.")
             
-            # Save to session for RAG context
             session['last_search'] = {
                 "query": args,
                 "results": [{"page_number": r[0], "snippet": r[1]} for r in results]
@@ -261,7 +312,6 @@ def execute():
 
     elif cmd == 'ai':
         # === SPECIFIC RATE LIMIT (COOLDOWN) ===
-        # Restrict AI command execution to once every 5 seconds to manage CPU strain
         last_ai_time = session.get('last_ai_time', 0.0)
         now = time.time()
         if now - last_ai_time < 5.0:
@@ -321,14 +371,9 @@ USER QUESTION: {args}"""
         if "<think>" in generated and "</think>" in generated:
             parts = generated.split("</think>")
             thoughts = parts[0].replace("<think>", "").strip()
-            
-            # Print thoughts strictly to the server console for debugging
             logger.debug(f"ORACLE INTERNAL THOUGHTS: {thoughts}") 
-            
-            # Only send the actual post-thought answer to the terminal user
             generated = parts[1].strip()
         
-        # Post-process repetition
         if generated.count("This is because") > 2:
             generated = generated.split("This is because")[0].strip()
         
@@ -341,23 +386,18 @@ USER QUESTION: {args}"""
         if not args:
             return jsonify(output="Usage: contact <email> <your message>\nExample: contact ajsbsd@gmail.com Hi, love the site!")
             
-        # Split the email (first argument) from the rest of the message
         parts = args.split(' ', 1)
         email = parts[0].strip()
         
-        # Mandatory Email Validation using standard Regex
         email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
         if not re.match(email_regex, email):
             return jsonify(output="Error: A valid email address is mandatory.\nUsage: contact <email> <message>")
             
-        # Verify that a message actually follows the email
         if len(parts) < 2 or not parts[1].strip():
             return jsonify(output="Error: Message content cannot be empty.\nUsage: contact <email> <message>")
             
-        # Sanitize message inputs
         message = sanitize_input(parts[1].strip())
         
-        # Save the contact submission safely to the SQLite database
         try:
             db.execute('INSERT INTO contacts (email, message) VALUES (?, ?)', (email, message))
             db.commit()
@@ -366,6 +406,32 @@ USER QUESTION: {args}"""
         except Exception as e:
             logger.error(f"Failed to log contact message: {e}")
             return jsonify(output=f"SYSTEM ERROR: Transmission failed. {e}")
+
+    elif cmd == 'startx':
+        if session.get('user_id'):
+            role = session.get('role', 'user')
+            if role == 'admin':
+                return jsonify(action='redirect', url=url_for('admin_dashboard'))
+            else:
+                return jsonify(action='redirect', url=url_for('user_dashboard'))
+        
+        return jsonify(action='startx', url=url_for('login'), output="SYSTEM> Requesting graphics server interface...")
+
+    elif cmd == 'motd':
+        # Direct CLI invocation for the MOTD banner [3]
+        motd_text = (
+            "======================================================================\n"
+            "* Sovereign OS v0.6 - SYSTEM MESSAGE OF THE DAY (MOTD) *\n"
+            "======================================================================\n"
+            "Welcome to the workspace of Aaron (Senior Linux Engineer).\n\n"
+            "To establish communication or submit direct inquiries:\n"
+            "- EMAIL: ajsbsd@gmail.com\n"
+            "- SHELL: Run the 'contact <email> <message>' command directly \n"
+            "         from this terminal console.\n\n"
+            "* Type 'help' to view all available shell subcommands.\n"
+            "======================================================================"
+        )
+        return jsonify(output=motd_text)
 
     elif cmd == 'clear':
         return jsonify(action='clear')
@@ -378,18 +444,23 @@ USER QUESTION: {args}"""
 # --- 9. ADMIN DASHBOARD & CRUD ROUTES ---
 
 @app.route('/admin')
-@limiter.exempt  # Exempt admin routes from rate limits to prevent lockout during heavy dev sessions
-@login_required
+@limiter.exempt
+@login_required(role='admin')
 def admin_dashboard():
-    """Renders the admin dashboard with the table of posts and contact messages on a single page."""
+    """Renders the admin dashboard with posts, feedback forms, and inbox."""
     db = get_db()
     posts = db.execute('SELECT * FROM posts ORDER BY created_at DESC').fetchall()
     messages = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()
-    return render_template('admin.html', posts=posts, messages=messages)
+    
+    show_motd = session.get('show_motd', False)
+    if show_motd:
+        session['show_motd'] = False # Reset flag
+        
+    return render_template('admin.html', posts=posts, messages=messages, show_motd=show_motd)
 
 @app.route('/admin/new', methods=['GET', 'POST'])
 @limiter.exempt
-@login_required
+@login_required(role='admin')
 def new_post():
     """Handles displaying the 'New Post' page and saving the post."""
     if request.method == 'POST':
@@ -411,7 +482,7 @@ def new_post():
 
 @app.route('/admin/edit/<int:post_id>', methods=['GET', 'POST'])
 @limiter.exempt
-@login_required
+@login_required(role='admin')
 def edit_post(post_id):
     """Handles retrieving a post to edit and updating its content."""
     db = get_db()
@@ -438,7 +509,7 @@ def edit_post(post_id):
 
 @app.route('/admin/delete/<int:post_id>', methods=['POST'])
 @limiter.exempt
-@login_required
+@login_required(role='admin')
 def delete_post(post_id):
     """Handles safe deletion of a post via a POST request."""
     db = get_db()
@@ -454,98 +525,118 @@ def delete_post(post_id):
 
 @app.route('/admin/messages')
 @limiter.exempt
-@login_required
+@login_required(role='admin')
 def admin_messages():
-    """Renders contact us submissions directly using an inline Jinja string layout."""
+    """Renders contact us submissions using template file."""
     db = get_db()
     messages = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()
+    return render_template('admin/messages.html', messages=messages)
+
+
+# --- 10. USER PORTAL & COMMUNICATION ENDPOINTS ---
+
+@app.route('/user')
+@limiter.exempt
+@login_required(role='user')
+def user_dashboard():
+    """Renders standard user messaging interface using external template file."""
+    db = get_db()
+    current_username = session.get('username')
     
-    html_content = """
-    {% extends "base.html" %}
-    {% block title %}Messages - MicroPress{% endblock %}
-    {% block content %}
-    <section>
-        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2>Contact Us Messages</h2>
-            <a href="{{ url_for('admin_dashboard') }}" class="button outline">Back to Dashboard</a>
-        </header>
-        <table class="striped">
-            <thead>
-                <tr>
-                    <th scope="col" style="width: 25%;">Email</th>
-                    <th scope="col" style="width: 20%;">Date Submitted</th>
-                    <th scope="col" style="width: 55%;">Message</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if messages %}
-                    {% for msg in messages %}
-                        <tr>
-                            <td><strong><a href="mailto:{{ msg['email'] }}">{{ msg['email'] }}</a></strong></td>
-                            <td>{{ msg['created_at'] }}</td>
-                            <td style="white-space: pre-wrap;">{{ msg['message'] }}</td>
-                        </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="3" style="text-align: center;">No contact submissions yet.</td>
-                    </tr>
-                {% endif %}
-            </tbody>
-        </table>
-    </section>
-    {% endblock %}
-    """
-    return render_template_string(html_content, messages=messages)
+    show_motd = session.get('show_motd', False)
+    if show_motd:
+        session['show_motd'] = False # Clear from session after load
+        
+    received = db.execute('''
+        SELECT * FROM direct_messages 
+        WHERE receiver_username = ? 
+        ORDER BY created_at DESC
+    ''', (current_username,)).fetchall()
+    
+    sent = db.execute('''
+        SELECT * FROM direct_messages 
+        WHERE sender_username = ? 
+        ORDER BY created_at DESC
+    ''', (current_username,)).fetchall()
+
+    users = db.execute('SELECT username FROM users WHERE username != ?', (current_username,)).fetchall()
+    return render_template('user/dashboard.html', received=received, sent=sent, users=users, show_motd=show_motd)
+
+@app.route('/user/message/new', methods=['POST'])
+@limiter.limit("15 per minute")
+@login_required(role='user')
+def new_user_message():
+    """Handles dispatching message validations and SQLite injection protection."""
+    recipient = request.form.get('recipient', '').strip()
+    raw_message = request.form.get('message', '').strip()
+    sender = session.get('username')
+    db = get_db()
+
+    if not recipient or not raw_message:
+        return "Error: Missing parameters.", 400
+
+    if recipient == 'system':
+        recipient = app.config['ADMIN_USERNAME']
+
+    recipient_check = db.execute('SELECT 1 FROM users WHERE username = ?', (recipient,)).fetchone()
+    if not recipient_check:
+        return f"Error: Target recipient '{recipient}' does not exist.", 404
+
+    message = sanitize_input(raw_message)
+
+    try:
+        db.execute('''
+            INSERT INTO direct_messages (sender_username, receiver_username, message)
+            VALUES (?, ?, ?)
+        ''', (sender, recipient, message))
+        db.commit()
+        logger.info(f"Direct transmission successfully routed: '{sender}' -> '{recipient}'")
+    except Exception as e:
+        logger.error(f"Failed to record communication: {e}")
+        return "Internal server transmission error.", 500
+
+    return redirect(url_for('user_dashboard'))
 
 
-# --- 10. AUTH ROUTES ---
+# --- 11. AUTH ROUTES ---
 
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.exempt
 def login():
-    """Handles admin authentication securely supporting both raw text and hashes."""
+    """Handles dynamic user and administrator authentications via SQL database."""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+        db = get_db()
         
-        # Pull values securely from the running application config
-        expected_username = current_app.config.get('ADMIN_USERNAME', 'admin')
-        expected_password = current_app.config.get('ADMIN_PASSWORD')
+        user_record = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
         
-        if not expected_password:
-            logger.error("Authentication attempted, but no credential store is configured.")
-            return render_template('login.html', error="System configuration error.")
-
-        # Inspect if the expected password is a Werkzeug hash signature
-        is_hashed = expected_password.startswith(('pbkdf2:', 'scrypt:', 'bcrypt:')) if expected_password else False
-        
-        if username == expected_username:
-            if is_hashed:
-                password_correct = check_password_hash(expected_password, password)
-            else:
-                password_correct = (password == expected_password)
-                
-            if password_correct:
-                session['logged_in'] = True
-                logger.info("Admin user logged in successfully.")
+        if user_record and check_password_hash(user_record['password_hash'], password):
+            session['user_id'] = user_record['id']
+            session['username'] = user_record['username']
+            session['role'] = user_record['role']
+            session['show_motd'] = True # Trigger transient dashboard banner
+            logger.info(f"Session established successfully for username: '{username}' (Role: '{user_record['role']}')")
+            
+            if user_record['role'] == 'admin':
                 return redirect(url_for('admin_dashboard'))
             else:
-                logger.warning("Failed admin login attempt (incorrect password).")
+                return redirect(url_for('user_dashboard'))
         else:
-            logger.warning("Failed admin login attempt (incorrect username).")
+            logger.warning(f"Failed authentication attempt for username: '{username}'")
             
     return render_template('login.html')
 
-# --- 11. HEALTH CHECK ---
 @app.route('/logout')
 @limiter.exempt
 def logout():
     """Clears the session and redirects to the home console."""
-    session.pop('logged_in', None)
-    logger.info("Admin user logged out")
+    session.clear()
+    logger.info("User session terminated cleanly")
     return redirect(url_for('index'))
 
+
+# --- 12. HEALTH CHECK ---
 @app.route('/health')
 @limiter.exempt
 def health():
@@ -564,6 +655,7 @@ def health():
         "posts_count": post_count
     })
 
-# --- 12. DIRECT RUN (for dev only) ---
+
+# --- 13. DIRECT RUN (for dev only) ---
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)
