@@ -1,9 +1,12 @@
 # 🗄️ The Archive & The Oracle (v0.6.9)
 ### Sovereign Intelligence for the Senior Engineer
 
+(c) ajsbsd.net -/- Aaron James Summers -/- ongoingstoriesofmysoul.org
+
 > A terminal-based, local-first AI analyst that queries your private archive with verifiable, grounded responses. Zero cloud dependency. Zero deep learning framework bloat. Zero hardcoded credentials.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/ajsbsd/flask-ai-smollm/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ajsbsd/flask-ai-smollm/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
 [![SmolLM-360M](https://img.shields.io/badge/Model-SmolLM2--360M--Instruct--GGUF-green.svg)](https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF)
 
