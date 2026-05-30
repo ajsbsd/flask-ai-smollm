@@ -63,7 +63,7 @@ def load_ai():
 # --- 2. CONFIG ---
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev_key_892301823091')
-    DATABASE = 'micropress.db'
+    DATABASE = '{{ app_name }}.db'
     ARCHIVE_DB = 'imperium_archive.db'
     DEBUG = True
     SESSION_COOKIE_SECURE = False
@@ -397,7 +397,7 @@ def admin_messages():
     
     html_content = """
     {% extends "base.html" %}
-    {% block title %}Messages - MicroPress{% endblock %}
+    {% block title %}Messages - {{ app_name }}{% endblock %}
     {% block content %}
     <section>
         <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">

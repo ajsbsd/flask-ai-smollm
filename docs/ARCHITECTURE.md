@@ -52,7 +52,7 @@ $ grep -r "Liberation Front" ~/archive/  # Verify the claim
 
 Env Var	Default	Purpose
 SECRET_KEY	dev_key_...	Flask session signing
-DATABASE	micropress.db	Blog/posts SQLite DB
+DATABASE	{{ app_name }}.db	Blog/posts SQLite DB
 ARCHIVE_DB	imperium_archive.db	BM25 research index
 LOG_LEVEL	debug	Gunicorn logging verbosity
 

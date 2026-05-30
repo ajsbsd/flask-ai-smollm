@@ -3,7 +3,7 @@ import sys
 import sqlite3
 from werkzeug.security import generate_password_hash
 
-DATABASE = 'micropress.db'
+DATABASE = '{{ app_name }}.db'
 
 def get_connection():
     conn = sqlite3.connect(DATABASE)

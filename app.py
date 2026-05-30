@@ -69,7 +69,7 @@ def load_ai():
 
 # --- 2. CONFIG ---
 class Config:
-    DATABASE = 'micropress.db'
+    DATABASE = '{{ app_name }}.db'
     ARCHIVE_DB = 'imperium_archive.db'
     DEBUG = True
     SESSION_COOKIE_SECURE = False  # Set to True if deploying on HTTPS
