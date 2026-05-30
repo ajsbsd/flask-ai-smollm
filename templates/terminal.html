@@ -61,30 +61,26 @@
     </style>
 </head>
 <body>
-    <div id="terminal">
-        <!-- Render system MOTD banner if this is the user's first visit [2] -->
+    
+<div id="terminal">
+        <!-- Render system MOTD banner if this is the user's first visit -->
         {% if show_motd %}
         <div class="output-line" style="color: #33ff33;">======================================================================
-* Sovereign OS v0.6 - SYSTEM MESSAGE OF THE DAY (MOTD) *
+* {{ app_name|upper }} {{ sys_ver }} - SYSTEM MESSAGE OF THE DAY (MOTD) *
 ======================================================================
-Welcome to the workspace of Aaron (Senior Linux Engineer).
+Welcome to the workspace of {{ org_name }}.
 
 To establish communication or submit direct inquiries:
-- EMAIL: ajsbsd@gmail.com
+- EMAIL: {{ admin_email }}
 - SHELL: Run the 'contact &lt;email&gt; &lt;message&gt;' command directly 
          from this terminal console.
          
 * Type 'help' to view all available shell subcommands.
 ======================================================================</div>
         {% endif %}
-        <div class="output-line">Sovereign OS v0.6 (Console Initialized)</div>
+        <div class="output-line">{{ app_name }} {{ sys_ver }} (Console Initialized)</div>
         <div class="output-line">Type 'help' for system subcommands.</div>
     </div>
-    <div class="prompt-line">
-        <span class="prompt">guest@ajsbsd:~$</span>
-        <input type="text" id="command-input" autofocus autocomplete="off" spellcheck="false">
-    </div>
-
     <script>
         const terminal = document.getElementById('terminal');
         const input = document.getElementById('command-input');
