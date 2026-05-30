@@ -3,32 +3,41 @@ import sys
 import sqlite3
 from werkzeug.security import generate_password_hash
 
-DATABASE = '{{ app_name }}.db'
+DATABASE = 'wstudio.db'
 
 def get_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
 
+def ensure_table(conn):
+    conn.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password_hash TEXT,
+        role TEXT DEFAULT "user",
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    conn.commit()
+
 def add_user(username, password, role='user'):
-    """Hashes password and inserts user into the SQLite database."""
     conn = get_connection()
-    hashed_password = generate_password_hash(password)
+    ensure_table(conn)
     try:
         conn.execute(
             'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-            (username, hashed_password, role)
+            (username, generate_password_hash(password), role)
         )
         conn.commit()
-        print(f"SUCCESS: User '{username}' successfully registered as '{role}'.")
+        print(f"SUCCESS: User '{username}' registered as '{role}'.")
     except sqlite3.IntegrityError:
         print(f"ERROR: Username '{username}' is already taken.")
     finally:
         conn.close()
 
 def list_users():
-    """Outputs all currently registered users in a clean console format."""
     conn = get_connection()
+    ensure_table(conn)
     try:
         users = conn.execute('SELECT id, username, role, created_at FROM users').fetchall()
         print("\n" + "=" * 65)
@@ -37,8 +46,19 @@ def list_users():
         for u in users:
             print(f"{u['id']:<5} | {u['username']:<20} | {u['role']:<10} | {u['created_at']}")
         print("=" * 65 + "\n")
-    except sqlite3.OperationalError:
-        print("ERROR: Database table 'users' does not exist. Run the Flask server once to initialize it.")
+    finally:
+        conn.close()
+
+def delete_user(username):
+    conn = get_connection()
+    ensure_table(conn)
+    try:
+        cur = conn.execute('DELETE FROM users WHERE username=?', (username,))
+        conn.commit()
+        if cur.rowcount:
+            print(f"SUCCESS: User '{username}' deleted.")
+        else:
+            print(f"ERROR: User '{username}' not found.")
     finally:
         conn.close()
 
@@ -47,12 +67,12 @@ def show_usage():
     print("Usage:")
     print("  python3 manage_users.py add <username> <password> <role>")
     print("  python3 manage_users.py list")
-    print("\nRoles:")
-    print("  admin  - Has full access to the administrative post and contact controls")
-    print("  user   - Has restricted access to standard user transmissions/messages")
+    print("  python3 manage_users.py delete <username>")
+    print("\nRoles: admin | user")
     print("\nExamples:")
     print("  python3 manage_users.py add alex securepass123 user")
     print("  python3 manage_users.py add aaron complexpass456 admin")
+    print("  python3 manage_users.py delete alex")
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
@@ -66,18 +86,20 @@ if __name__ == '__main__':
             print("Error: Missing arguments.")
             show_usage()
             sys.exit(1)
-        username = sys.argv[2].strip()
-        password = sys.argv[3].strip()
         role = sys.argv[4].strip().lower()
-        
         if role not in ['admin', 'user']:
-            print("Error: Role must be either 'admin' or 'user'.")
+            print("Error: Role must be 'admin' or 'user'.")
             sys.exit(1)
-            
-        add_user(username, password, role)
-        
+        add_user(sys.argv[2].strip(), sys.argv[3].strip(), role)
+
     elif action == 'list':
         list_users()
-        
+
+    elif action == 'delete':
+        if len(sys.argv) < 3:
+            print("Error: Missing username.")
+            sys.exit(1)
+        delete_user(sys.argv[2].strip())
+
     else:
         show_usage()

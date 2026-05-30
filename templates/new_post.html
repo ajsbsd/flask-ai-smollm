@@ -3,54 +3,87 @@
 {% block content %}
 <section>
     <h2>Create New Post</h2>
-    
-    <!-- Flexbox layout for 2-column setup (Form left, AI Assistant right) -->
+
     <div style="display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; margin-top: 20px;">
-        
+
         <!-- LEFT: Create Post Form -->
         <div style="flex: 1.2; min-width: 320px;">
             <form action="{{ url_for('new_post') }}" method="POST">
                 <label for="title">Post Title</label>
                 <input type="text" id="title" name="title" required placeholder="Enter post title">
-                
+
                 <label for="content">Content</label>
                 <textarea id="content" name="content" required placeholder="Write your content here..." style="min-height: 280px;"></textarea>
-                
+
                 <div style="display: flex; gap: 15px; margin-top: 20px;">
                     <button type="submit">Publish Post</button>
                     <a href="{{ url_for('admin_dashboard') }}" class="button outline secondary">Cancel</a>
                 </div>
             </form>
         </div>
-        
+
         <!-- RIGHT: AI Co-Writer Assistant Panel -->
         <div style="flex: 0.8; min-width: 300px; background-color: #fafbfc; border: 1px solid #e1e4e8; border-radius: 8px; padding: 25px;">
             <h3 style="margin-top: 0; font-size: 1.25rem;">Oracle AI Assistant</h3>
             <p style="font-size: 0.85rem; color: #586069; margin-bottom: 15px;">
-                Ask the local Qwen3 engine to draft, expand, or summarize ideas for your post.
+                Ask the local engine to draft, expand, or summarize ideas for your post.
             </p>
-            
+
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <textarea id="ai-prompt" placeholder="Ask AI: 'Draft a summary of Germany and Russia relations in 1946...'" style="min-height: 80px; font-size: 0.9rem; margin: 0;"></textarea>
                 <button type="button" id="ai-gen-btn" class="outline" style="margin: 0; font-size: 0.9rem; padding: 8px 15px;">Ask Oracle</button>
             </div>
-            
-            <!-- Output Block -->
+
             <div style="margin-top: 20px;">
                 <label style="font-size: 0.85rem; font-weight: bold; color: #586069;">Generated Output</label>
                 <div id="ai-output" style="background: #ffffff; border: 1px dashed #d1d5da; border-radius: 4px; padding: 15px; min-height: 120px; font-size: 0.9rem; color: #24292e; white-space: pre-wrap; margin-top: 5px; max-height: 250px; overflow-y: auto;">
                     Output will appear here...
                 </div>
             </div>
-            
-            <!-- Insert Utility -->
+
             <button type="button" id="ai-insert-btn" class="secondary" style="display: none; margin-top: 15px; width: 100%; font-size: 0.9rem; padding: 8px 15px;">
                 Insert into Content Area
             </button>
         </div>
-        
+
     </div>
 </section>
 
-<!-- In the JS -->
-aiOutput.innerText = "Drafting response using local {{ app_name }} engine...";
+<script>
+const appName = {{ app_name | tojson }};
+const aiOutput = document.getElementById('ai-output');
+const aiGenBtn = document.getElementById('ai-gen-btn');
+const aiInsertBtn = document.getElementById('ai-insert-btn');
+const aiPrompt = document.getElementById('ai-prompt');
+const contentArea = document.getElementById('content');
+
+aiGenBtn.addEventListener('click', async () => {
+    const prompt = aiPrompt.value.trim();
+    if (!prompt) return;
+    aiOutput.innerText = `Drafting response using local ${appName} engine...`;
+    aiInsertBtn.style.display = 'none';
+    aiGenBtn.disabled = true;
+
+    try {
+        const res = await fetch('/api/exec', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({command: 'ai ' + prompt})
+        });
+        const data = await res.json();
+        aiOutput.innerText = data.output || 'No response.';
+        aiInsertBtn.style.display = 'block';
+    } catch (e) {
+        aiOutput.innerText = 'Error: Could not reach Oracle.';
+    } finally {
+        aiGenBtn.disabled = false;
+    }
+});
+
+aiInsertBtn.addEventListener('click', () => {
+    const text = aiOutput.innerText;
+    contentArea.value += (contentArea.value ? '\n\n' : '') + text;
+    aiInsertBtn.style.display = 'none';
+});
+</script>
+{% endblock %}

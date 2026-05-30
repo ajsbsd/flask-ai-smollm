@@ -314,10 +314,48 @@ def admin_dashboard():
 def user_dashboard():
     return render_template('dashboard.html')
 
+@app.route('/admin/post/new', methods=['GET', 'POST'])
+@login_required(role='admin')
+def new_post():
+    if request.method == 'POST':
+        title = sanitize(request.form.get('title', '').strip())
+        content = sanitize(request.form.get('content', '').strip())
+        if not title or not content:
+            return render_template('new_post.html', error="Title and content required.")
+        db = get_db()
+        db.execute('INSERT INTO posts (title, content) VALUES (?, ?)', (title, content))
+        db.commit()
+        return redirect(url_for('admin_dashboard'))
+    return render_template('new_post.html')
+
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('index'))
+
+@app.route("/admin/post/<int:post_id>/edit", methods=["GET", "POST"])
+@login_required(role="admin")
+def edit_post(post_id):
+    db = get_db()
+    post = db.execute("SELECT * FROM posts WHERE id=?", (post_id,)).fetchone()
+    if not post: abort(404)
+    if request.method == "POST":
+        title = sanitize(request.form.get("title", "").strip())
+        content = sanitize(request.form.get("content", "").strip())
+        if not title or not content:
+            return render_template("edit_post.html", post=post, error="Title and content required.")
+        db.execute("UPDATE posts SET title=?, content=? WHERE id=?", (title, content, post_id))
+        db.commit()
+        return redirect(url_for("admin_dashboard"))
+    return render_template("edit_post.html", post=post)
+
+@app.route("/admin/post/<int:post_id>/delete", methods=["POST"])
+@login_required(role="admin")
+def delete_post(post_id):
+    db = get_db()
+    db.execute("DELETE FROM posts WHERE id=?", (post_id,))
+    db.commit()
+    return redirect(url_for("admin_dashboard"))
 
 # --- BOOT ---
 if __name__ == '__main__':
