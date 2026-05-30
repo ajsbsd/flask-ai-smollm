@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-import sys
 import sqlite3
+import sys
+
 from werkzeug.security import generate_password_hash
 
 DATABASE = 'wstudio.db'
+
 
 def get_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def ensure_table(conn):
     conn.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -19,6 +22,7 @@ def ensure_table(conn):
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     conn.commit()
+
 
 def add_user(username, password, role='user'):
     conn = get_connection()
@@ -35,19 +39,27 @@ def add_user(username, password, role='user'):
     finally:
         conn.close()
 
+
 def list_users():
     conn = get_connection()
     ensure_table(conn)
     try:
-        users = conn.execute('SELECT id, username, role, created_at FROM users').fetchall()
+        users = conn.execute(
+            'SELECT id, username, role, created_at FROM users').fetchall()
         print("\n" + "=" * 65)
         print(f"{'ID':<5} | {'Username':<20} | {'Role':<10} | {'Created At':<20}")
         print("=" * 65)
         for u in users:
-            print(f"{u['id']:<5} | {u['username']:<20} | {u['role']:<10} | {u['created_at']}")
+            print(
+                f"{
+                    u['id']:<5} | {
+                    u['username']:<20} | {
+                    u['role']:<10} | {
+                    u['created_at']}")
         print("=" * 65 + "\n")
     finally:
         conn.close()
+
 
 def delete_user(username):
     conn = get_connection()
@@ -62,6 +74,7 @@ def delete_user(username):
     finally:
         conn.close()
 
+
 def show_usage():
     print("Sovereign User Management Tool")
     print("Usage:")
@@ -73,6 +86,7 @@ def show_usage():
     print("  python3 manage_users.py add alex securepass123 user")
     print("  python3 manage_users.py add aaron complexpass456 admin")
     print("  python3 manage_users.py delete alex")
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
