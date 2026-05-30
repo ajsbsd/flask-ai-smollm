@@ -104,17 +104,15 @@ def query_index(conn, search_term):
             excerpt_rich = excerpt_rich.replace(
                 "[", "\\[").replace(
                 "\\[bold", "[bold")
-
+            rank_rounded = round(rank, 4)
             console.print(Panel(
-                f"[page]Page {page_num}[/page] | [score]BM25: {
-                    round(
-                        rank,
-                        4)}[/score]\n\n"
+                f"[page]Page {page_num}[/page] | [score]BM25: {rank_rounded}[/score]\n\n"
                 f"[dim]Context:[/dim]\n{excerpt_rich}",
                 title=f"[bold]Match #{idx}[/bold]",
                 border_style="bright_blue",
                 padding=(1, 2)
             ))
+
     except sqlite3.OperationalError as e:
         console.print(f"[error][!] SQLite query error: {e}[/error]")
 
