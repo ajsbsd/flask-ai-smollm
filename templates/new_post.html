@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {% extends "base.html" %}
 {% block title %}Create New Post - {{ app_name }}{% endblock %}
 {% block content %}
@@ -51,78 +52,11 @@
         
     </div>
 </section>
+=======
+<!-- In new_post.html -->
+<h3 style="margin-top: 0; font-size: 1.25rem;">{{ app_name }} Intelligence</h3>
+<p>Ask the local engine to draft ideas...</p>
+>>>>>>> 5283c87 (v0.6.2 - Finalized wstudio branding in templates and benchmarking)
 
-<!-- AI Assistant JavaScript -->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const aiGenBtn = document.getElementById('ai-gen-btn');
-    const aiPrompt = document.getElementById('ai-prompt');
-    const aiOutput = document.getElementById('ai-output');
-    const aiInsertBtn = document.getElementById('ai-insert-btn');
-    const contentArea = document.getElementById('content');
-
-    let lastGeneratedText = "";
-
-    aiGenBtn.addEventListener('click', async () => {
-        const promptText = aiPrompt.value.trim();
-        if (!promptText) {
-            alert("Please enter an AI prompt first.");
-            return;
-        }
-
-        // Disable input during generation
-        aiGenBtn.disabled = true;
-        aiGenBtn.innerText = "Thinking...";
-        aiOutput.innerText = "Drafting response using local Qwen3 model...";
-        aiInsertBtn.style.display = 'none';
-
-        try {
-            // Sends the query straight to your terminal executables endpoint
-            const response = await fetch('/api/exec', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: 'ai ' + promptText })
-            });
-            
-            const data = await response.json();
-            
-            if (data.output) {
-                // Strip out standard "ORACLE>" system prefix and metadata suffixes if present
-                let cleanResponse = data.output
-                    .replace(/^ORACLE>\s*/, '')
-                    .replace(/\s*\[CONTEXT:\s*\w+\]$/, '');
-                
-                lastGeneratedText = cleanResponse.trim();
-                aiOutput.innerText = lastGeneratedText;
-                aiInsertBtn.style.display = 'block';
-            } else {
-                aiOutput.innerText = "Error: Could not retrieve a generation from the model.";
-            }
-        } catch (error) {
-            logger.error("AI Generation error:", error);
-            aiOutput.innerText = "Connection lost. Ensure the Flask server is running.";
-        } finally {
-            aiGenBtn.disabled = false;
-            aiGenBtn.innerText = "Ask Oracle";
-        }
-    });
-
-    // Handles copying/inserting the text safely into the target textbox
-    aiInsertBtn.addEventListener('click', () => {
-        if (!lastGeneratedText) return;
-        
-        if (contentArea.value) {
-            contentArea.value += "\n\n" + lastGeneratedText;
-        } else {
-            contentArea.value = lastGeneratedText;
-        }
-        
-        // Visual indicator that the text was inserted
-        aiInsertBtn.innerText = "Copied & Inserted!";
-        setTimeout(() => {
-            aiInsertBtn.innerText = "Insert into Content Area";
-        }, 1500);
-    });
-});
-</script>
-{% endblock %}
+<!-- In the JS -->
+aiOutput.innerText = "Drafting response using local {{ app_name }} engine...";

@@ -3,21 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<<<<<<< HEAD
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
+=======
+    <title>{% block title %}ajsbsd.NET{% endblock %}</title>
+>>>>>>> 5283c87 (v0.6.2 - Finalized wstudio branding in templates and benchmarking)
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
 </head>
 <body>
     <header class="container">
         <nav>
             <ul>
+<<<<<<< HEAD
                 <li><strong><a href="{{ url_for('index') }}" class="contrast">{{ app_name }}</a></strong></li>
+=======
+                <li><strong><a href="{{ url_for('index') }}" class="contrast">ajsBSD.net</a></strong></li>
+>>>>>>> 5283c87 (v0.6.2 - Finalized wstudio branding in templates and benchmarking)
             </ul>
             <ul>
                 {% if session.get('logged_in') %}
                     <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
                     <li><a href="{{ url_for('logout') }}" class="secondary">Logout</a></li>
                 {% else %}
-                    <li><a href="{{ url_for('login') }}">Admin Login</a></li>
+                    <li><a href="{{ url_for('login') }}">ajsBSD.net Login</a></li>
                 {% endif %}
             </ul>
         </nav>
