@@ -30,23 +30,31 @@ class Config:
     ORG_NAME = "wstudio labs"
     VERSION = "v0.6.5"
     ADMIN_EMAIL = "ajsbsd@gmail.com"
-    
+
     DATABASE = f"{APP_NAME}.db"
     ARCHIVE_DB = 'imperium_archive.db'
-    
-    SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-    DEBUG = True
-    
+
+    # FIX 1: SECRET_KEY must come from env — never regenerate on restart or sessions break
+    SECRET_KEY = os.environ.get('SECRET_KEY') or (_ for _ in ()).throw(
+        RuntimeError("SECRET_KEY environment variable is not set. Run: export SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')")
+    )
+    DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
+
     # Session Security
     SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
-    
+
     # Admin Defaults
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin')
 
 # --- 2. AI MANAGER (The Oracle) ---
+
+# FIX 2: Server-side AI cooldown — keyed by IP, not session (session is client-controlled)
+_ai_cooldowns = {}
+_ai_cooldown_lock = threading.Lock()
+
 class OracleManager:
     """Handles AI Model lifecycle and benchmarking."""
     def __init__(self):
@@ -60,13 +68,13 @@ class OracleManager:
             if self.model is None:
                 from llama_cpp import Llama
                 from huggingface_hub import hf_hub_download
-                
+
                 logger.info(f"Loading Oracle: {self.file}")
                 path = hf_hub_download(repo_id=self.repo, filename=self.file)
                 self.model = Llama(
                     model_path=path,
                     n_ctx=2048,
-                    n_threads=6, # Optimized for Acer Aspire
+                    n_threads=6,
                     n_gpu_layers=0,
                     verbose=False
                 )
@@ -75,7 +83,7 @@ class OracleManager:
     def generate(self, prompt, system_context=""):
         self.load()
         full_prompt = f"CONTEXT:\n{system_context}\n\nQUESTION: {prompt}" if system_context else prompt
-        
+
         start = time.perf_counter()
         with self.lock:
             response = self.model.create_chat_completion(
@@ -84,10 +92,10 @@ class OracleManager:
                 temperature=0.2
             )
         duration = time.perf_counter() - start
-        
+
         tokens = response['usage']['completion_tokens']
         tps = tokens / duration if duration > 0 else 0
-        
+
         return {
             "text": response['choices'][0]['message']['content'].strip(),
             "stats": {"tps": round(tps, 2), "time": round(duration, 2)}
@@ -106,16 +114,14 @@ def get_db():
 def init_db(app):
     with app.app_context():
         db = get_db()
-        # Schema Initialization
         db.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password_hash TEXT, role TEXT DEFAULT "user", created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
         db.execute('CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
         db.execute('CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT, message TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
         db.execute('CREATE TABLE IF NOT EXISTS direct_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_username TEXT, receiver_username TEXT, message TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
-        
-        # Seed Admin
+
         admin_user = app.config['ADMIN_USERNAME']
         if not db.execute('SELECT 1 FROM users WHERE username = ?', (admin_user,)).fetchone():
-            db.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', 
+            db.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
                        (admin_user, generate_password_hash(app.config['ADMIN_PASSWORD']), 'admin'))
         db.commit()
 
@@ -123,6 +129,10 @@ def init_db(app):
 app = Flask(__name__)
 app.config.from_object(Config)
 limiter = Limiter(app=app, key_func=get_remote_address, storage_uri="memory://")
+
+# FIX 3: Init DB here so gunicorn workers call it on startup, not just __main__
+with app.app_context():
+    init_db(app)
 
 @app.teardown_appcontext
 def close_db(e):
@@ -164,31 +174,63 @@ class CommandHandler:
 
     @staticmethod
     def cat(args, db):
-        if not args: return "Usage: cat [id]"
-        res = db.execute('SELECT content FROM posts WHERE id=?', (args,)).fetchone()
-        return res['content'] if res else "Not found."
+        # FIX 4: Validate that args is a positive integer before querying
+        if not args.strip():
+            return "Usage: cat [id]"
+        if not args.strip().isdigit():
+            return "Error: ID must be a number. Usage: cat [id]"
+        post_id = int(args.strip())
+        res = db.execute('SELECT content FROM posts WHERE id=?', (post_id,)).fetchone()
+        return res['content'] if res else f"No post with ID {post_id}."
 
     @staticmethod
     def search(args, db):
+        if not args.strip():
+            return "Usage: search [term]\nExample: search Avakov"
+
         if not os.path.exists(current_app.config['ARCHIVE_DB']):
-            return "Archive DB Missing."
+            return "Error: imperium_archive.db not found. Build your index first."
+
+        clean_args = re.sub(r'[^a-zA-Z0-9\s*]', '', args).strip()
+        if not clean_args:
+            return "Error: Search term must contain letters or numbers."
+
         with sqlite3.connect(current_app.config['ARCHIVE_DB']) as s_db:
-            rows = s_db.execute("SELECT page_number, snippet(document_pages, 1, '[', ']', '...', 10) FROM document_pages WHERE content MATCH ? LIMIT 3", (args,)).fetchall()
-            if not rows: return "No matches."
-            session['last_search'] = {"results": [{"page_number": r[0], "snippet": r[1]} for r in rows]}
-            return "\n".join([f"PG {r[0]}: {r[1]}" for r in rows])
+            try:
+                rows = s_db.execute(
+                    "SELECT page_number, snippet(document_pages, 1, '[', ']', '...', 10) "
+                    "FROM document_pages WHERE content MATCH ? LIMIT 3",
+                    (clean_args,)
+                ).fetchall()
+
+                if not rows:
+                    return f"No matches found for '{clean_args}'."
+
+                session['last_search'] = {
+                    "results": [{"page_number": r[0], "snippet": r[1]} for r in rows]
+                }
+                return "\n".join([f"PG {r[0]}: {r[1]}" for r in rows])
+
+            except sqlite3.OperationalError as e:
+                logger.error(f"FTS5 Search Query failed: {e}")
+                return "Error: Invalid search syntax. Please use alphanumeric characters only."
 
     @staticmethod
     def ai(args, db):
-        # Cooldown
-        last = session.get('last_ai', 0)
-        if time.time() - last < 5: return f"Wait {int(5-(time.time()-last))}s"
-        session['last_ai'] = time.time()
+        # FIX 5: Server-side cooldown keyed by IP, not client session
+        ip = request.remote_addr
+        now = time.time()
+        with _ai_cooldown_lock:
+            last = _ai_cooldowns.get(ip, 0)
+            wait = 5 - (now - last)
+            if wait > 0:
+                return f"Wait {int(wait) + 1}s before next query."
+            _ai_cooldowns[ip] = now
 
         ctx_text = ""
         if "results" in session.get('last_search', {}) and "based on" in args.lower():
             ctx_text = "\n".join([f"Snippet: {r['snippet']}" for r in session['last_search']['results']])
-        
+
         result = oracle.generate(args, ctx_text)
         return f"ORACLE> {result['text']}\n({result['stats']['tps']} t/s | {result['stats']['time']}s)"
 
@@ -217,7 +259,6 @@ def execute():
     cmd = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
 
-    # Command Map
     commands = {
         "ls": CommandHandler.ls,
         "cat": CommandHandler.cat,
@@ -229,14 +270,16 @@ def execute():
     if cmd in commands:
         output = commands[cmd](args, db)
         return jsonify(output=output)
-    
-    # Static logic commands
+
     if cmd == "help":
         return jsonify(output="Available: " + ", ".join(commands.keys()) + ", clear, motd, whoami, startx")
     if cmd == "clear":
         return jsonify(action="clear")
     if cmd == "whoami":
-        return jsonify(output=f"{app.config['ADMIN_EMAIL']} (Principal @ {app.config['APP_NAME']})")
+        # FIX 6: Return the actual logged-in user, or guest
+        username = session.get('username', 'guest')
+        role = session.get('role', 'guest')
+        return jsonify(output=f"{username} ({role})")
     if cmd == "motd":
         return jsonify(output=f"Welcome to {app.config['ORG_NAME']} Shell {app.config['VERSION']}")
     if cmd == "startx":
@@ -265,6 +308,12 @@ def admin_dashboard():
     msgs = db.execute('SELECT * FROM contacts ORDER BY created_at DESC').fetchall()
     return render_template('admin.html', posts=posts, messages=msgs)
 
+# FIX 7: user_dashboard was referenced in login + startx but never defined
+@app.route('/dashboard')
+@login_required(role='user')
+def user_dashboard():
+    return render_template('dashboard.html')
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -272,5 +321,4 @@ def logout():
 
 # --- BOOT ---
 if __name__ == '__main__':
-    init_db(app)
     app.run(host='127.0.0.1', port=3000, debug=True, use_reloader=False)

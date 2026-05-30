@@ -81,6 +81,12 @@ To establish communication or submit direct inquiries:
         <div class="output-line">{{ app_name }} {{ sys_ver }} (Console Initialized)</div>
         <div class="output-line">Type 'help' for system subcommands.</div>
     </div>
+        <!-- === PASTE THIS PROMPT BLOCK HERE === -->
+    <div class="prompt-line">
+        <span class="prompt">guest@{{ app_name }}:~$</span>
+        <input type="text" id="command-input" autofocus autocomplete="off" spellcheck="false">
+    </div>
+    <!-- ==================================== -->
     <script>
         const terminal = document.getElementById('terminal');
         const input = document.getElementById('command-input');
