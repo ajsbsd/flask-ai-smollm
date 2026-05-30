@@ -51,11 +51,9 @@ def list_users():
         print("=" * 65)
         for u in users:
             print(
-                f"{
-                    u['id']:<5} | {
-                    u['username']:<20} | {
-                    u['role']:<10} | {
-                    u['created_at']}")
+                f"{u['id']:<5} | {u['username']:<20} | "
+                f"{u['role']:<10} | {u['created_at']}"
+            )
         print("=" * 65 + "\n")
     finally:
         conn.close()
