@@ -1,4 +1,4 @@
-# 🗄️ The Archive & The Oracle (v0.5)
+# 🗄️ The Archive & The Oracle (v0.6)
 ### Sovereign Intelligence for the Senior Engineer
 
 > A terminal-based, local-first AI analyst that queries your private archive with verifiable, grounded responses. Zero cloud dependency. Zero deep learning framework bloat. Zero hardcoded credentials.
@@ -8,6 +8,51 @@
 [![SmolLM-360M](https://img.shields.io/badge/Model-SmolLM2--360M--Instruct--GGUF-green.svg)](https://huggingface.co/unsloth/SmolLM2-360M-Instruct-GGUF)
 
 ---
+
+Version 0.6 transforms the application's underlying architecture from a single-administrator design to a structured, multi-user **Role-Based Access Control (RBAC)** workspace. This release also decouples the frontend entirely from the core logic, removing all remaining inline templates from `app.py`.
+
+---
+
+## 🚀 What's New in v0.6
+
+- **Sovereign User Dashboard & Communications:** Standard authenticated users now have access to a dedicated portal at `/user`. This includes secure `direct_messages` database logging, enabling users to transmit secure messages directly to the `"system"` (administrator) or other registered users.
+- **Decoupled Template Architecture:** Eliminated all inline HTML / Jinja string declarations from the backend. Message tables and user portals now render cleanly using external template lookups from the `/templates` directory.
+- **Offline User Administration CLI:** Included `manage_users.py`. This offline terminal utility allows system engineers to securely register, list, or configure administrator and user roles without exposing public registration endpoints to the web.
+- **First-Visit MOTD Terminal Banner:** Implemented a console-style Message of the Day (MOTD) banner that renders inside the terminal output strictly on a user's first visit per session.
+- **New `motd` and `startx` Terminal Commands:**
+  - `motd` – Outputs your custom contact and system information on-demand.
+  - `startx` – Triggers client-side redirect animations and routes users dynamically to their correct dashboard interface based on their authenticated role.
+
+---
+
+## 🛡️ Security & Performance Enhancements
+
+- **Multi-Level Authorization:** Refactored the `login_required` decorator to enforce role permissions (`@login_required(role='admin')` or `@login_required(role='user')`) across all dashboard routes and CRUD endpoints.
+- **Secure Seeding:** On startup, the database auto-initializes the `users` table and safely hashes and inserts your default `.env` administrator credentials if they are absent.
+- **Database Sanitization:** Handled XSS mitigation on user feedback forms and direct communication fields before writing to the database using `bleach`.
+
+---
+
+## 📦 Installation & Getting Started
+
+1. **Set up your environment variables** inside your `.env` file:
+   ```ini
+   SECRET_KEY="generate-a-secure-32-char-random-string"
+   ADMIN_USERNAME="aaron"
+   ADMIN_PASSWORD="your_secure_password"
+   ```
+
+2. **Run your offline user registration CLI** to add standard accounts:
+   ```bash
+   python3 manage_users.py add alex securepassword123 user
+   ```
+
+3. **Run the optimized launch script:**
+   ```bash
+   ./run.sh
+   ```
+
+   ---
 
 ## 🎯 Why This Exists
 
