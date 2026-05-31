@@ -371,24 +371,24 @@ def login():
         db = get_db()
         username = request.form.get('username')
         password = request.form.get('password')
-        
-        logger.debug(f"--- Login attempt ---")
+
+        logger.debug("--- Login attempt ---")
         logger.debug(f"Submitted username: '{username}'")
         logger.debug(f"Submitted password: '{password}'")
 
         user = db.execute(
             'SELECT * FROM users WHERE username = ?',
             (username,)).fetchone()
-            
+
         if user:
             logger.debug("User found in database. Checking password hash...")
             password_matches = check_password_hash(user['password_hash'], password)
             logger.debug(f"Password match status: {password_matches}")
-            
+
             if password_matches:
                 session.update({
-                    'user_id': user['id'], 
-                    'username': user['username'], 
+                    'user_id': user['id'],
+                    'username': user['username'],
                     'role': user['role']
                 })
                 logger.debug("Session updated. Redirecting to admin dashboard...")
@@ -397,7 +397,7 @@ def login():
                 logger.warning("Authentication failed: Password did not match.")
         else:
             logger.warning(f"Authentication failed: Username '{username}' not found in DB.")
-            
+
     return render_template('login.html', error="Invalid username or password.")
 
 
