@@ -369,17 +369,36 @@ def execute():
 def login():
     if request.method == 'POST':
         db = get_db()
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        logger.debug(f"--- Login attempt ---")
+        logger.debug(f"Submitted username: '{username}'")
+        logger.debug(f"Submitted password: '{password}'")
+
         user = db.execute(
             'SELECT * FROM users WHERE username = ?',
-            (request.form.get('username'),
-             )).fetchone()
-        if user and check_password_hash(
-                user['password_hash'], request.form.get('password')):
-            session.update(
-                {'user_id': user['id'], 'username': user['username'], 'role': user['role']})
-            return redirect(
-                url_for('admin_dashboard' if user['role'] == 'admin' else 'user_dashboard'))
-    return render_template('login.html')
+            (username,)).fetchone()
+            
+        if user:
+            logger.debug("User found in database. Checking password hash...")
+            password_matches = check_password_hash(user['password_hash'], password)
+            logger.debug(f"Password match status: {password_matches}")
+            
+            if password_matches:
+                session.update({
+                    'user_id': user['id'], 
+                    'username': user['username'], 
+                    'role': user['role']
+                })
+                logger.debug("Session updated. Redirecting to admin dashboard...")
+                return redirect(url_for('admin_dashboard' if user['role'] == 'admin' else 'user_dashboard'))
+            else:
+                logger.warning("Authentication failed: Password did not match.")
+        else:
+            logger.warning(f"Authentication failed: Username '{username}' not found in DB.")
+            
+    return render_template('login.html', error="Invalid username or password.")
 
 
 @app.route('/admin')
