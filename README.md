@@ -60,7 +60,8 @@ Version 0.6.9 is a hardening and stability release that resolves all known runti
    ```bash
    git clone https://github.com/ajsbsd/flask-ai-smollm.git
    cd flask-ai-smollm
-   python3 -m venv .venv && source .venv/bin/activate
+   python3 -m venv .venv
+   source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
