@@ -184,7 +184,7 @@ def generate_response_and_audio(history):
     """
     Runs the inference models sequentially on the allocated GPU.
     """
-    global tokenizer, llm_model, tts_processor, tts_model, tts_vocoder, speaker_embeddings
+    #global tokenizer, llm_model, tts_processor, tts_model, tts_vocoder, speaker_embeddings
 
     if not history or history[-1].get("role") != "user":
         return history, None
@@ -270,7 +270,7 @@ def transcribe_audio(filepath):
     """
     Transcribes audio utilizing the Whisper-small architecture.
     """
-    global whisper_processor, whisper_model
+    #global whisper_processor, whisper_model
     if filepath is None:
         return ""
         
