@@ -33,7 +33,7 @@ STT_MODEL_ID = "openai/whisper-small"
 hf_token = os.environ.get("HF_TOKEN")
 
 # ================== Eager Model Loading ==================
-# We load the models globally onto the CPU during startup. This prevents 
+# We load the models globally onto the CPU during startup. This prevents
 # downloading/loading models during active GPU sessions, avoiding timeouts
 # and saving your dynamic ZeroGPU quota.
 print("Loading tokenizer and LLM on CPU...")
@@ -56,7 +56,7 @@ try:
     tts_processor = SpeechT5Processor.from_pretrained(TTS_MODEL_ID, token=hf_token)
     tts_model = SpeechT5ForTextToSpeech.from_pretrained(TTS_MODEL_ID, token=hf_token).eval()
     tts_vocoder = SpeechT5HifiGan.from_pretrained(TTS_VOCODER_ID, token=hf_token).eval()
-    
+
     # Load speaker embeddings
     embeddings = load_dataset("Matthijs/cmu-arctic-xvectors", split="validation", token=hf_token)
     speaker_embeddings = torch.tensor(embeddings[7306]["xvector"]).unsqueeze(0)
@@ -127,25 +127,25 @@ def load_readme():
 
 def split_text_into_chunks(text, max_chars=250):
     """
-    Splits text safely for SpeechT5. Handles edge cases where single 
+    Splits text safely for SpeechT5. Handles edge cases where single
     sentences are longer than max_chars by sub-chunking them on word limits.
     """
     processed_text = text.replace("...", ".").replace("e.g.", "eg").replace("i.e.", "ie")
     sentences = processed_text.split(". ")
     chunks = []
     current_chunk = ""
-    
+
     for sentence in sentences:
         sentence = sentence.strip()
         if not sentence:
             continue
-            
+
         # Handle sentences that exceed the maximum limit on their own
         if len(sentence) >= max_chars:
             if current_chunk:
                 chunks.append(current_chunk.strip() + ".")
                 current_chunk = ""
-            
+
             words = sentence.split(" ")
             temp_chunk = ""
             for word in words:
@@ -162,10 +162,10 @@ def split_text_into_chunks(text, max_chars=250):
             else:
                 chunks.append(current_chunk.strip() + ".")
                 current_chunk = sentence
-                
+
     if current_chunk:
         chunks.append(current_chunk.strip() + ".")
-        
+
     return [c.replace("..", ".") for c in chunks if c.strip() and c != "."]
 
 
@@ -184,7 +184,7 @@ def generate_response_and_audio(history):
     """
     Runs the inference models sequentially on the allocated GPU.
     """
-    #global tokenizer, llm_model, tts_processor, tts_model, tts_vocoder, speaker_embeddings
+    # Models loaded at module level; accessed read-only here
 
     if not history or history[-1].get("role") != "user":
         return history, None
@@ -246,7 +246,7 @@ def generate_response_and_audio(history):
 
             text_chunks = split_text_into_chunks(generated_text)
             full_speech = []
-            
+
             for chunk in text_chunks:
                 tts_inputs = tts_processor(text=chunk, return_tensors="pt", max_length=512, truncation=True).to(device)
                 with torch.no_grad():
@@ -270,24 +270,24 @@ def transcribe_audio(filepath):
     """
     Transcribes audio utilizing the Whisper-small architecture.
     """
-    #global whisper_processor, whisper_model
+    # Whisper models loaded at module level; accessed read-only here
     if filepath is None:
         return ""
-        
+
     if whisper_model is None or whisper_processor is None:
         return "Whisper pipeline is not available."
 
     try:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         whisper_model.to(device)
-        
+
         audio, sr = librosa.load(filepath, sr=16000)
         inputs = whisper_processor(audio, sampling_rate=sr, return_tensors="pt")
         input_features = inputs.input_features.to(device)
-        
+
         with torch.no_grad():
             outputs = whisper_model.generate(input_features)
-            
+
         return whisper_processor.batch_decode(outputs, skip_special_tokens=True)[0]
     except Exception as e:
         return f"Transcription error: {e}"
@@ -317,16 +317,16 @@ with gr.Blocks(head="""
             elem_classes=["bg-gray-700", "text-white", "border-gray-600"]
         )
         audio_output = gr.Audio(label="Response Audio", autoplay=True)
-        
+
         # Two-stage progressive submit pattern for fluid UX
         text_input.submit(
-            fn=user_interaction, 
-            inputs=[text_input, chatbot], 
+            fn=user_interaction,
+            inputs=[text_input, chatbot],
             outputs=[text_input, chatbot],
             queue=False
         ).then(
-            fn=generate_response_and_audio, 
-            inputs=[chatbot], 
+            fn=generate_response_and_audio,
+            inputs=[chatbot],
             outputs=[chatbot, audio_output]
         )
 
