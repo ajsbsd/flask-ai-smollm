@@ -23,15 +23,15 @@ except ImportError:
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s:%(name)s:%(message)s')
-logger = logging.getLogger("wstudio.engine")
+logger = logging.getLogger("ajsbsd.engine")
 
 # --- 1. CONFIGURATION ---
 
 
 class Config:
-    APP_NAME = "wstudio"
-    ORG_NAME = "wstudio labs"
-    VERSION = "v0.6.5"
+    APP_NAME = "ajsbsd"
+    ORG_NAME = "ajsbsd.net"
+    VERSION = "v0.7.7"
     ADMIN_EMAIL = "ajsbsd@gmail.com"
 
     DATABASE = f"{APP_NAME}.db"
