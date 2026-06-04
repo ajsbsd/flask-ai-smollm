@@ -65,18 +65,21 @@
 <div id="terminal">
         <!-- Render system MOTD banner if this is the user's first visit -->
         {% if show_motd %}
-        <div class="output-line" style="color: #33ff33;">======================================================================
-* {{ app_name|upper }} {{ sys_ver }} - SYSTEM MESSAGE OF THE DAY (MOTD) *
-======================================================================
-Welcome to the workspace of {{ org_name }}.
+        <div class="output-line" style="color: #33ff33;">----------------------------------------------------------------------
+:: ajsbsd.net :: system environment :: 
+----------------------------------------------------------------------
+Welcome to the ajsbsd.net workspace.
 
-To establish communication or submit direct inquiries:
-- EMAIL: {{ admin_email }}
-- SHELL: Run the 'contact &lt;email&gt; &lt;message&gt;' command directly 
-         from this terminal console.
-         
-* Type 'help' to view all available shell subcommands.
-======================================================================</div>
+[ COMMUNICATION PROTOCOLS ]
+> EMAIL : ajsbsd@gmail.com
+> SHELL : Use 'contact <email> <message>' to message directly 
+          from this console.
+
+[ SYSTEM COMMANDS ]
+> Run 'help' to view all available shell subcommands.
+----------------------------------------------------------------------
+ajsbsd.net (Console Initialized)
+Ready for input. Type 'help' to begin.</div>
         {% endif %}
         <div class="output-line">{{ app_name }} {{ sys_ver }} (Console Initialized)</div>
         <div class="output-line">Type 'help' for system subcommands.</div>
