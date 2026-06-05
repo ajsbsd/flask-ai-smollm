@@ -152,6 +152,11 @@ Ready for input. Type 'help' to begin.</div>
                             appendLine(data.output);
                         }
                     }
+		if (data.action === "play_music") {
+    document.getElementById("bg-music").play();
+} else if (data.action === "stop_music") {
+    document.getElementById("bg-music").pause();
+}
                 })
                 .catch(err => {
                     appendLine("SYSTEM ERROR: Failed to communicate with kernel.");
@@ -160,5 +165,9 @@ Ready for input. Type 'help' to begin.</div>
             }
         });
     </script>
+    <!-- Background Audio Element -->
+<audio id="bg-music" loop>
+    <source src="{{ url_for('static', filename='audio/loop.mp3') }}" type="audio/mpeg">
+</audio>
 </body>
 </html>
