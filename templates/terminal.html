@@ -106,7 +106,7 @@ Ready for input. Type 'help' to begin.</div>
             if (isCommand) {
                 line.innerHTML = `<span style="color: #33ff33;">${promptSymbol}</span> ${text}`;
             } else {
-                line.textContent = text;
+                line.innerHTML = text;
             }
             terminal.appendChild(line);
             terminal.scrollTop = terminal.scrollHeight;

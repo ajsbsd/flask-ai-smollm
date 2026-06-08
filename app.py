@@ -305,12 +305,53 @@ class CommandHandler:
             target = 'admin_dashboard' if ctx['session'].get('role') == 'admin' else 'user_dashboard'
             return {"action": "redirect", "url": url_for(target)}
         return {"action": "startx", "url": url_for('login')}
+    
+        @staticmethod
+    def frames(args, ctx):
+        """Displays video stills associated with a document ID."""
+        if not args.strip():
+            return "Usage: frames [document_id]"
+        if not args.strip().isdigit():
+            return "Error: ID must be a number. Usage: frames [id]"
+
+        doc_id = int(args.strip())
+        a_db = get_archive_db()
+        if not a_db:
+            return "Error: imperium_archive.db not found."
+
+        try:
+            rows = a_db.execute(
+                "SELECT frame_path, timestamp_sec FROM video_frames WHERE document_id = ? ORDER BY timestamp_sec",
+                (doc_id,)
+            ).fetchall()
+
+            if not rows:
+                return f"No video frames found for document ID {doc_id}."
+
+            # We use <br> tags to create line breaks in the HTML terminal
+            output = ["<br>--- Video Stills ---<br>"]
+
+            for row in rows:
+                # row[0] is 'static/images/...' -> url_for needs 'images/...'
+                filename = row[0].replace('static/', '', 1)
+                img_url = url_for('static', filename=filename)
+                timestamp = row[1]
+
+                # Create an HTML image tag with inline CSS to fit a terminal aesthetic
+                img_html = f'<img src="{img_url}" style="max-width: 300px; display: block; margin: 10px 0; border: 1px solid #444; background: #000;">'
+                output.append(img_html)
+                output.append(f'<span style="color: #888;">Timestamp: {timestamp}s</span><br>')
+
+            return "\n".join(output)
+
+        except sqlite3.OperationalError:
+            return "Error: 'video_frames' table not found. Did you run the SQL script to create it?"
 
 COMMAND_MAP = {
     "ls": CommandHandler.ls, "cat": CommandHandler.cat, "search": CommandHandler.search,
     "ai": CommandHandler.ai, "contact": CommandHandler.contact, "help": CommandHandler.help,
     "clear": CommandHandler.clear, "music": CommandHandler.music, "whoami": CommandHandler.whoami,
-    "motd": CommandHandler.motd, "startx": CommandHandler.startx,
+    "motd": CommandHandler.motd, "startx": CommandHandler.startx,  "frames": CommandHandler.frames
 }
 
 # --- 7. ROUTES ---
