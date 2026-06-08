@@ -306,7 +306,7 @@ class CommandHandler:
             return {"action": "redirect", "url": url_for(target)}
         return {"action": "startx", "url": url_for('login')}
     
-        @staticmethod
+    @staticmethod
     def frames(args, ctx):
         """Displays video stills associated with a document ID."""
         if not args.strip():
