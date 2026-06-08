@@ -296,10 +296,10 @@ class CommandHandler:
                 [f"Snippet: {r['snippet']}" for r in last_search['results']])
 
         result = oracle.generate(args, ctx_text)
-        return f"ORACLE> {
-            result['text']}\n({
-            result['stats']['tps']} t/s | {
-            result['stats']['time']}s)"
+        return (
+            f"ORACLE> {result['text']}\n"
+            f"({result['stats']['tps']} t/s | {result['stats']['time']}s)"
+        )
 
     @staticmethod
     def contact(args, ctx):
