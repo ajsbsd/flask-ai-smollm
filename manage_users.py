@@ -2,8 +2,6 @@
 import sqlite3
 import sys
 
-from werkzeug.security import generate_password_hash
-
 DATABASE = 'wstudio.db'
 
 
@@ -29,8 +27,9 @@ def add_user(username, password, role='user'):
     ensure_table(conn)
     try:
         conn.execute(
-            'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-            (username, generate_password_hash(password), role)
+            '''INSERT INTO users (username, password_hash, role)
+               VALUES (?, ?, ?)',
+               (username, generate_password_hash(password), role)'''
         )
         conn.commit()
         print(f"SUCCESS: User '{username}' registered as '{role}'.")
@@ -47,7 +46,10 @@ def list_users():
         users = conn.execute(
             'SELECT id, username, role, created_at FROM users').fetchall()
         print("\n" + "=" * 65)
-        print(f"{'ID':<5} | {'Username':<20} | {'Role':<10} | {'Created At':<20}")
+        print(
+                f"{'ID':<5} | {'Username':<20} | "
+                "f{'Role':<10} | {'Created At':<20}"
+                )
         print("=" * 65)
         for u in users:
             print(
