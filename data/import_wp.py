@@ -8,8 +8,10 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Import WordPress SQL dump to SQLite")
-    parser.add_argument("dump", type=Path, help="Path to WordPress SQL dump file")
+    parser = argparse.ArgumentParser(
+            description="Import WordPress SQL dump to SQLite")
+    parser.add_argument("dump", type=Path,
+                        help="Path to WordPress SQL dump file")
     parser.add_argument("db", type=Path, help="Path to output SQLite database")
     parser.add_argument(
         "--truncate", action="store_true", help="Clear existing posts table"
@@ -41,7 +43,7 @@ def yield_tuples(s):
         elif c == ")" and not in_q:
             depth -= 1
             if depth == 0:
-                yield s[start : i + 1]
+                yield s[start: i+1]
 
 
 def parse_tuple(s):
@@ -116,7 +118,8 @@ def main():
         sys.exit(1)
 
     print(f"📦 Reading: {args.dump.name}")
-    sql = strip_comments(args.dump.read_text(encoding="utf-8", errors="ignore"))
+    sql = strip_comments(args.dump.read_text(
+        encoding="utf-8", errors="ignore"))
     table = "wp_posts"
 
     rows = extract_rows(sql, table)
@@ -140,7 +143,10 @@ def main():
         title = clean(cols[1])
         content = clean(cols[4])
         ptype = clean(cols[20])
-        created = clean(cols[2]) or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # XXX Claude Sonet 4.6 low is the _SECOND_ search
+        # result on GOOG
+        fallback = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        created = clean(cols[2]) or fallback
 
         if ptype not in ("post", "page"):
             stats["skipped"] += 1
@@ -150,10 +156,12 @@ def main():
             continue
 
         try:
-            cur.execute(
-                "INSERT INTO posts (title, content, created_at, post_type) VALUES (?, ?, ?, ?)",
-                (title, content, created, ptype),
+            sql = (
+                "INSERT INTO posts "
+                "(title, content, created_at, post_type) "
+                "VALUES (?, ?, ?, ?)"
             )
+            cur.execute(sql, (title, content, created, ptype))
             stats["imported"] += 1
         except sqlite3.Error as e:
             print(f"❌ Error: {e}")
