@@ -43,8 +43,10 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     if not SECRET_KEY:
         raise RuntimeError(
-            "SECRET_KEY environment variable is not set. Run: "
-            "export SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')")
+            "SECRET_KEY environment variable is not set. Run:\n"
+            "export SECRET_KEY=$(python3 -c 'import secrets; "
+            "print(secrets.token_hex(32))')"
+        )
 
     DEBUG = os.environ.get('DEBUG', 'false').lower() == 'true'
 
@@ -88,7 +90,12 @@ class OracleManager:
 
     def generate(self, prompt, system_context=""):
         self.load()
-        full_prompt = f"CONTEXT:\n{system_context}\n\nQUESTION: {prompt}" if system_context else prompt
+        if system_context:
+            full_prompt = (
+                f"CONTEXT:\n{system_context}\n\nQUESTION: {prompt}"
+            )
+        else:
+            full_prompt = prompt
 
         start = time.perf_counter()
         with self.lock:
@@ -155,14 +162,17 @@ def init_db(app):
         admin_user = app.config['ADMIN_USERNAME']
         if not db.execute(
             'SELECT 1 FROM users WHERE username = ?',
-            (admin_user,
-             )).fetchone():
+            (admin_user,)
+        ).fetchone():
             db.execute(
-                'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-                (admin_user,
-                 generate_password_hash(
-                     app.config['ADMIN_PASSWORD']),
-                    'admin'))
+                'INSERT INTO users (username, password_hash, role) '
+                'VALUES (?, ?, ?)',
+                (
+                    admin_user,
+                    generate_password_hash(app.config['ADMIN_PASSWORD']),
+                    'admin'
+                )
+            )
         db.commit()
 
 
@@ -232,8 +242,10 @@ class CommandHandler:
     @staticmethod
     def ls(args, ctx):
         posts = ctx['db'].execute('SELECT id, title FROM posts').fetchall()
-        return "\n".join(
-            [f"ID: {p['id']} | {p['title']}" for p in posts]) if posts else "No records."
+        return (
+            "\n".join([f"ID: {p['id']} | {p['title']}" for p in posts])
+            if posts else "No records."
+        )
 
     @staticmethod
     def cat(args, ctx):
@@ -258,12 +270,18 @@ class CommandHandler:
 
         s_db = get_archive_db()
         if not s_db:
-            return "Error: imperium_archive.db not found. Build your index first."
+            return (
+                "Error: imperium_archive.db not found. "
+                "Build your index first."
+            )
 
         try:
             rows = s_db.execute(
-                "SELECT page_number, snippet(document_pages, 1, '[', ']', '...', 10) "
-                "FROM document_pages WHERE content MATCH ? LIMIT 3", (clean_args,)).fetchall()
+                "SELECT page_number, "
+                "snippet(document_pages, 1, '[', ']', '...', 10) "
+                "FROM document_pages WHERE content MATCH ? LIMIT 3",
+                (clean_args,)
+            ).fetchall()
 
             if not rows:
                 return f"No matches found for '{clean_args}'."
@@ -275,7 +293,10 @@ class CommandHandler:
 
         except sqlite3.OperationalError as e:
             logger.error(f"FTS5 Search Query failed: {e}")
-            return "Error: Invalid search syntax. Please use alphanumeric characters only."
+            return (
+                "Error: Invalid search syntax. "
+                "Please use alphanumeric characters only."
+            )
 
     @staticmethod
     def ai(args, ctx):
@@ -352,15 +373,19 @@ class CommandHandler:
 
     @staticmethod
     def motd(args, ctx):
-        return f"Welcome to {
-            current_app.config['ORG_NAME']} Shell {
-            current_app.config['VERSION']}"
+        return (
+            f"Welcome to {current_app.config['ORG_NAME']} "
+            f"Shell {current_app.config['VERSION']}"
+        )
 
     @staticmethod
     def startx(args, ctx):
         if 'user_id' in ctx['session']:
-            target = 'admin_dashboard' if ctx['session'].get(
-                'role') == 'admin' else 'user_dashboard'
+            target = (
+                'admin_dashboard'
+                if ctx['session'].get('role') == 'admin'
+                else 'user_dashboard'
+            )
             return {"action": "redirect", "url": url_for(target)}
         return {"action": "startx", "url": url_for('login')}
 
@@ -379,7 +404,9 @@ class CommandHandler:
 
         try:
             rows = a_db.execute(
-                "SELECT frame_path, timestamp_sec FROM video_frames WHERE document_id = ? ORDER BY timestamp_sec",
+                "SELECT frame_path, timestamp_sec "
+                "FROM video_frames WHERE document_id = ? "
+                "ORDER BY timestamp_sec",
                 (doc_id,)
             ).fetchall()
 
@@ -395,17 +422,25 @@ class CommandHandler:
                 img_url = url_for('static', filename=filename)
                 timestamp = row[1]
 
-                # Create an HTML image tag with inline CSS to fit a terminal
-                # aesthetic
-                img_html = f'<img src="{img_url}" style="max-width: 300px; display: block; margin: 10px 0; border: 1px solid #444; background: #000;">'
+                # Create an HTML image tag with inline CSS for terminal style
+                img_html = (
+                    f'<img src="{img_url}" style="max-width: 300px; '
+                    f'display: block; margin: 10px 0; '
+                    f'border: 1px solid #444; background: #000;">'
+                )
                 output.append(img_html)
                 output.append(
-                    f'<span style="color: #888;">Timestamp: {timestamp}s</span><br>')
+                    f'<span style="color: #888;">'
+                    f'Timestamp: {timestamp}s</span><br>'
+                )
 
             return "\n".join(output)
 
         except sqlite3.OperationalError:
-            return "Error: 'video_frames' table not found. Did you run the SQL script to create it?"
+            return (
+                "Error: 'video_frames' table not found. "
+                "Did you run the SQL script to create it?"
+            )
 
 
 COMMAND_MAP = {
@@ -481,10 +516,16 @@ def login():
 
         if user and check_password_hash(user['password_hash'], password):
             session.update({
-                'user_id': user['id'], 'username': user['username'], 'role': user['role']
+                'user_id': user['id'],
+                'username': user['username'],
+                'role': user['role']
             })
             logger.debug("Login successful. Redirecting to dashboard...")
-            target = 'admin_dashboard' if user['role'] == 'admin' else 'user_dashboard'
+            target = (
+                'admin_dashboard'
+                if user['role'] == 'admin'
+                else 'user_dashboard'
+            )
             return redirect(url_for(target))
 
         # Generic error message prevents user enumeration
@@ -525,7 +566,8 @@ def new_post():
 
         db = get_db()
         db.execute(
-            'INSERT INTO posts (title, content) VALUES (?, ?)', (title, content))
+            'INSERT INTO posts (title, content) VALUES (?, ?)',
+            (title, content))
         db.commit()
         return redirect(url_for('admin_dashboard'))
     return render_template('new_post.html')
