@@ -86,7 +86,10 @@ if __name__ == "__main__":
         data = extract_pdf_to_pages(pdf_file)
         db_conn = build_index(data, db_file)
     else:
-        print(f"[+] Database '{db_file}' found. Skipping indexing phase and loading index...")
+        print(
+            f"[+] Database '{db_file}' found. "
+            f"Skipping indexing phase and loading index..."
+            )
         db_conn = sqlite3.connect(db_file)
 
     # Enter the interactive console loop
