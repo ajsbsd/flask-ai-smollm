@@ -2,10 +2,9 @@ import subprocess
 import os
 
 # The exact file yt-dlp created
-video_file = "Theo de Raadt (ruBSD 2013) [OXS8ljif9b8].mkv"
-base_name = "theo_rubsd2013"
+video_file = "bsd.mkv"
+base_name = "OpenBSD"
 
-# 1. Extract Audio (MP3) for your existing RAG pipeline
 print("Extracting audio...")
 subprocess.run([
     'ffmpeg', '-i', video_file,
