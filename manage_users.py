@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import sqlite3
 import sys
+from werkzeug.security import generate_password_hash
 
-DATABASE = 'wstudio.db'
-
+DATABASE = '/home/aaron/www/ajsbsd.db'
 
 def get_connection():
     conn = sqlite3.connect(DATABASE)
@@ -28,9 +28,10 @@ def add_user(username, password, role='user'):
     try:
         conn.execute(
             '''INSERT INTO users (username, password_hash, role)
-               VALUES (?, ?, ?)',
-               (username, generate_password_hash(password), role)'''
+                VALUES (?, ?, ?)''',
+            (username, generate_password_hash(password), role)
         )
+        # XXX claude sonnet 4.6-low
         conn.commit()
         print(f"SUCCESS: User '{username}' registered as '{role}'.")
     except sqlite3.IntegrityError:
