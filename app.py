@@ -22,10 +22,10 @@ except ImportError:
 
 # === LOGGING SETUP ===
 logging.basicConfig(
+    logger = logging.getLogger(__name__),
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s:%(name)s:%(message)s'
 )
-logger = logging.getLogger("ajsbsd.engine")
 
 # --- 1. CONFIGURATION ---
 
@@ -345,10 +345,39 @@ class CommandHandler:
             "contact",
             "clear",
             "music",
+            "docs",
+            "frames",
             "motd",
             "whoami",
             "startx"]
         return "Available: " + ", ".join(cmds)
+
+
+    @staticmethod
+    def docs(args, ctx):
+        a_db = get_archive_db()
+        if not a_db:
+            return "Error: imperium_archive.db not found."
+
+        try:
+            rows = a_db.execute(
+                """
+                SELECT id, title
+                FROM documents
+                ORDER BY id
+                """
+            ).fetchall()
+
+            if not rows:
+                return "No documents found."
+
+            return "\n".join(
+                f"{row['id']}: {row['title']}"
+                for row in rows
+            )
+
+        except sqlite3.OperationalError as exc:
+            return f"Database error: {exc}"
 
     @staticmethod
     def clear(args, ctx): return {"action": "clear"}
@@ -452,10 +481,12 @@ COMMAND_MAP = {
     "help": CommandHandler.help,
     "clear": CommandHandler.clear,
     "music": CommandHandler.music,
+    "docs": CommandHandler.docs,
+    "frames": CommandHandler.frames,
     "whoami": CommandHandler.whoami,
     "motd": CommandHandler.motd,
     "startx": CommandHandler.startx,
-    "frames": CommandHandler.frames}
+    }
 
 # --- 7. ROUTES ---
 
@@ -508,8 +539,12 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
 
-        logger.debug(f"Login attempt for username: '{username}'")
+        #logger.debug(f"Login attempt for username: '{username}'")
         # SECURITY FIX: NEVER log passwords in plaintext
+        logger.debug(
+            "Login attempt for username: '%s'",
+            username,
+        )
 
         user = db.execute(
             'SELECT * FROM users WHERE username = ?', (username,)).fetchone()
@@ -611,6 +646,56 @@ def delete_post(post_id):
     db.execute("DELETE FROM posts WHERE id=?", (post_id,))
     db.commit()
     return redirect(url_for("admin_dashboard"))
+
+@app.route("/player")
+def player():
+    slides = [
+        {
+            "start": 0,
+            "end": 10,
+            "image": url_for(
+                "static",
+                filename="images/OpenBSD_frames/frame_1.jpg"
+            ),
+            "text": "Transcript text for first 10 seconds"
+        },
+        {
+            "start": 10,
+            "end": 20,
+            "image": url_for(
+                "static",
+                filename="images/OpenBSD_frames/frame_2.jpg"
+            ),
+            "text": "Transcript text for second 10 seconds"
+        },
+        {
+            "start": 20,
+            "end": 30,
+            "image": url_for(
+                "static",
+                filename="images/OpenBSD_frames/frame_3.jpg"
+            ),
+            "text": "Transcript text for third 10 seconds"
+        },
+        {
+            "start": 30,
+            "end": 40,
+            "image": url_for(
+                "static",
+                filename="images/OpenBSD_frames/frame_4.jpg"
+            ),
+            "text": "Transcript text for fourth 10 seconds"
+        }
+    ]
+
+    return render_template(
+        "player.html",
+        slides=slides,
+        audio_url=url_for(
+            "static",
+            filename="audio/OpenBSD.mp3"
+        )
+    )
 
 
 # --- BOOT ---
