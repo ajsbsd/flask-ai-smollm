@@ -20,12 +20,13 @@ try:
 except ImportError:
     BLEACH_AVAILABLE = False
 
-# === LOGGING SETUP ===
 logging.basicConfig(
-    logger = logging.getLogger(__name__),
     level=logging.DEBUG,
     format='%(asctime)s %(levelname)s:%(name)s:%(message)s'
 )
+
+logger = logging.getLogger(__name__)
+
 
 # --- 1. CONFIGURATION ---
 
