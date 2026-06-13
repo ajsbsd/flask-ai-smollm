@@ -4,6 +4,7 @@ import re
 import sqlite3
 import threading
 import time
+import glob
 from functools import wraps
 
 from flask import (Flask, abort, current_app, g, jsonify, redirect,
@@ -35,7 +36,7 @@ class Config:
     APP_NAME = "ajsbsd"
     ORG_NAME = "ajsbsd.net"
     VERSION = "v0.7.7"
-    ADMIN_EMAIL = "ajsbsd@gmail.com"
+    ADMIN_EMAIL = "aaron@ajsbsd.net"
 
     DATABASE = f"{APP_NAME}.db"
     ARCHIVE_DB = 'imperium_archive.db'
