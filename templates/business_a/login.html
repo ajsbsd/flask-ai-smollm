@@ -1,0 +1,18 @@
+{% extends "base_a.html" %}
+
+{% block content %}
+    <div class="login-box">
+        <h2>Log in to Business A</h2>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required autocomplete="username">
+            
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+            
+            <button type="submit">Enter</button>
+        </form>
+    </div>
+{% endblock %}
