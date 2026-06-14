@@ -5,6 +5,7 @@ import sqlite3
 import threading
 import time
 import glob
+import secrets
 from functools import wraps
 
 from flask import (Flask, abort, current_app, g, jsonify, redirect,
@@ -209,6 +210,16 @@ def inject_branding():
         'sys_ver': app.config['VERSION'],
         'admin_email': app.config['ADMIN_EMAIL']}
 
+
+import secrets # Make sure this is imported at the top
+
+@app.context_processor
+def inject_csrf():
+    # Generates a secure token and stores it in the user's session
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return {'csrf_token': session['csrf_token']}
+
 # --- 5. SECURITY & UTILITIES ---
 
 
@@ -409,6 +420,7 @@ class CommandHandler:
             f"Shell {current_app.config['VERSION']}"
         )
 
+
     @staticmethod
     def startx(args, ctx):
         if 'user_id' in ctx['session']:
@@ -418,7 +430,12 @@ class CommandHandler:
                 else 'user_dashboard'
             )
             return {"action": "redirect", "url": url_for(target)}
-        return {"action": "startx", "url": url_for('login')}
+            
+        # --- UPDATE THIS PART ---
+        # Tell it which business folder to load. 
+        # Change 'business_a' to match your actual folder name.
+        default_business = 'business_a' 
+        return {"action": "startx", "url": url_for('login', business=default_business)}
 
     @staticmethod
     def frames(args, ctx):
@@ -537,6 +554,15 @@ def execute():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        # 1. VALIDATE THE CSRF TOKEN FIRST
+        form_token = request.form.get('csrf_token')
+        session_token = session.pop('csrf_token', None) # Pop it so it can't be reused
+
+        if not form_token or not session_token or form_token != session_token:
+            logger.warning("CSRF validation failed.")
+            return render_template('login.html', error="Session expired. Please try again.")
+
+        # 2. Proceed with your normal login logic
         db = get_db()
         username = request.form.get('username')
         password = request.form.get('password')
