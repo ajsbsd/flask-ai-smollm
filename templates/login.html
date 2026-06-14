@@ -15,18 +15,4 @@
         <button type="submit">Log In</button>
     </form>
 </article>
-
-<article style="max-width: 400px; margin: auto;">
-    <h2>ajsBSD.net Login</h2>
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" required autocomplete="username">
-        
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-        
-        <button type="submit">Log In</button>
-    </form>
-</article>
 {% endblock %}
