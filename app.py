@@ -336,26 +336,12 @@ class CommandHandler:
         )
 
     @staticmethod
-    def contact(args, ctx):
-        parts = args.split(' ', 1)
-        if len(parts) < 2:
-            return "Usage: contact <email> <msg>"
-
-        ctx['db'].execute(
-            'INSERT INTO contacts (email, message) VALUES (?, ?)',
-            (parts[0], sanitize(parts[1]))
-        )
-        ctx['db'].commit()
-        return "Logged."
-
-    @staticmethod
     def help(args, ctx):
         cmds = [
             "ls",
             "cat",
             "search",
             "ai",
-            "contact",
             "clear",
             "music",
             "docs",
@@ -496,7 +482,6 @@ COMMAND_MAP = {
     "cat": CommandHandler.cat,
     "search": CommandHandler.search,
     "ai": CommandHandler.ai,
-    "contact": CommandHandler.contact,
     "help": CommandHandler.help,
     "clear": CommandHandler.clear,
     "music": CommandHandler.music,
