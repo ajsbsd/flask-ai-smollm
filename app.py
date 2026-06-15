@@ -311,8 +311,37 @@ class CommandHandler:
         return f"{username} ({role})"
 
     @staticmethod
+    def whoami(args, ctx):
+        username = ctx['session'].get('username', 'guest')
+        role = ctx['session'].get('role', 'guest')
+        return f"{username} ({role})"
+
+    @staticmethod
     def motd(args, ctx):
-        return f"Welcome to {current_app.config['ORG_NAME']} Shell {current_app.config['VERSION']}"
+        org = current_app.config['ORG_NAME']
+        ver = current_app.config['VERSION']
+        
+        banner = f"""
+=====================================================
+  Welcome to the {org} Shell {ver}
+-----------------------------------------------------
+  [!] SYSTEM: Custom OpenBSD & Flask Architecture
+  
+  Like what you see? This is a bare-metal, zero-bloat,
+  CDN-free web environment. 
+  
+  We build and host custom servers exactly like this.
+  
+  >> PRICING:
+     Basic Shell Hosting:  $15 / month
+     Full Custom Build:    $45 / month
+     
+  >> CONTACT:
+     Type: contact you@email.com "I want a server"
+     Or visit: https://{org}/contact
+====================================================="""
+        return banner.strip()
+
 
     @staticmethod
     def startx(args, ctx):
@@ -320,8 +349,7 @@ class CommandHandler:
             target = 'admin_dashboard' if ctx['session'].get('role') == 'admin' else 'user_dashboard'
             return {"action": "redirect", "url": url_for(target)}
         
-        # Route to the new multi-business login
-        default_business = 'business_a' 
+        default_business = 'business_a'
         return {"action": "startx", "url": url_for('login_business', business=default_business)}
 
     @staticmethod
