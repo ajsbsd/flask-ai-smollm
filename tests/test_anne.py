@@ -5,8 +5,10 @@ from data.anne import build_index, query_index
 
 @pytest.fixture
 def conn():
-    pages = [(1, "Democracy requires free institutions and open debate."),
-             (2, "Autocracy consolidates power by undermining opposition.")]
+    pages = [
+        (1, "Democracy requires free institutions and open debate."),
+        (2, "Autocracy consolidates power by undermining opposition."),
+    ]
     conn = build_index(pages, db_path=":memory:")
     yield conn
     conn.close()

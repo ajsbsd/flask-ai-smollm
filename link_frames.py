@@ -3,6 +3,7 @@
 Dynamic Frame Linker
 Zero hard-coded values. Discovers documents and images interactively.
 """
+
 import os
 import sqlite3
 import glob
@@ -14,11 +15,13 @@ console = Console()
 
 
 def main():
-    console.print(Panel.fit(
-        "[bold cyan]🔗 Dynamic Frame Linker[/bold cyan]\n"
-        "Link extracted video frames to your FTS5 RAG database.",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]🔗 Dynamic Frame Linker[/bold cyan]\n"
+            "Link extracted video frames to your FTS5 RAG database.",
+            border_style="cyan",
+        )
+    )
 
     db_path = "imperium_archive.db"
     if not os.path.exists(db_path):
@@ -29,14 +32,14 @@ def main():
     cursor = conn.cursor()
 
     # 1. Ensure table exists
-    cursor.execute('''
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS video_frames (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         document_id INTEGER,
         frame_path TEXT,
         timestamp_sec REAL
     )
-    ''')
+    """)
 
     # 2. Find the document dynamically via FTS5
     search_term = Prompt.ask(
@@ -46,18 +49,19 @@ def main():
     )
 
     # Use snippet to show context and confirm it's the right document
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT rowid, snippet(document_pages, 1, '[', ']', '...', 40)
         FROM document_pages
         WHERE document_pages MATCH ?
         LIMIT 5
-    """, (search_term,))
+    """,
+        (search_term,),
+    )
     results = cursor.fetchall()
 
     if not results:
-        console.print(
-            f"\n[red]❌ No matches found for '{search_term}'.[/red]"
-        )
+        console.print(f"\n[red]❌ No matches found for '{search_term}'.[/red]")
         console.print(
             "[dim]💡 Tip: Make sure the MP3 transcript has been "
             "ingested into imperium_archive.db first![/dim]"
@@ -71,13 +75,11 @@ def main():
     doc_id = results[0][0]
     snippet = (
         results[0][1]
-        .replace('[', '[bold bright_red]')
-        .replace(']', '[/bold bright_red]')
+        .replace("[", "[bold bright_red]")
+        .replace("]", "[/bold bright_red]")
     )
 
-    console.print(
-        f"[dim]Linking to Document ID (rowid): [bold]{doc_id}[/bold][/dim]"
-    )
+    console.print(f"[dim]Linking to Document ID (rowid): [bold]{doc_id}[/bold][/dim]")
     console.print(f"[dim]Context: {snippet}[/dim]\n")
 
     # 3. Find the frames directory dynamically
@@ -85,13 +87,11 @@ def main():
     frames_dir = Prompt.ask(
         "[bold yellow]Enter the directory containing "
         "the extracted frames[/bold yellow]",
-        default=default_dir
+        default=default_dir,
     )
 
     if not os.path.isdir(frames_dir):
-        console.print(
-            f"[red]❌ Directory '{frames_dir}' does not exist.[/red]"
-        )
+        console.print(f"[red]❌ Directory '{frames_dir}' does not exist.[/red]")
         conn.close()
         return
 
@@ -102,20 +102,14 @@ def main():
     )
 
     if not frame_files:
-        console.print(
-            f"[red]❌ No .jpg or .png files found in '{frames_dir}'.[/red]"
-        )
+        console.print(f"[red]❌ No .jpg or .png files found in '{frames_dir}'.[/red]")
         conn.close()
         return
 
-    console.print(
-        f"[green]✅ Discovered {len(frame_files)} image files.[/green]"
-    )
+    console.print(f"[green]✅ Discovered {len(frame_files)} image files.[/green]")
 
     # Clear existing frames for this doc_id to prevent duplicates on re-runs
-    cursor.execute(
-        "DELETE FROM video_frames WHERE document_id = ?", (doc_id,)
-    )
+    cursor.execute("DELETE FROM video_frames WHERE document_id = ?", (doc_id,))
 
     # 5. Insert dynamically
     total_frames = len(frame_files)
@@ -123,8 +117,7 @@ def main():
         # Auto-calculate a sequential timestamp
         # (e.g., 0.0, 2.5, 5.0, 7.5 for 4 frames)
         timestamp = (
-            round(i * (10.0 / max(total_frames - 1, 1)), 1)
-            if total_frames > 1 else 0.0
+            round(i * (10.0 / max(total_frames - 1, 1)), 1) if total_frames > 1 else 0.0
         )
 
         # Ensure path is relative to 'static/' so Flask's url_for works
@@ -134,10 +127,13 @@ def main():
             else frame_path
         )
 
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO video_frames (document_id, frame_path, timestamp_sec)
             VALUES (?, ?, ?)
-        ''', (doc_id, web_path, timestamp))
+        """,
+            (doc_id, web_path, timestamp),
+        )
 
     conn.commit()
 

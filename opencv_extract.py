@@ -4,11 +4,12 @@ from pathlib import Path
 
 
 def extract_frames_from_time_range(
-        video_path,
-        start_time_seconds,
-        duration=10,
-        num_frames=4,
-        output_dir="extracted_frames"):
+    video_path,
+    start_time_seconds,
+    duration=10,
+    num_frames=4,
+    output_dir="extracted_frames",
+):
     """
     Extract frames from a specific time range in the video.
 
@@ -38,8 +39,10 @@ def extract_frames_from_time_range(
     end_frame = min(end_frame, total_frames)  # Don't exceed video length
 
     # Calculate evenly spaced frame indices within the 10-second range
-    frame_indices = [int(start_frame + i * (end_frame - start_frame) /
-                         max(num_frames - 1, 1)) for i in range(num_frames)]
+    frame_indices = [
+        int(start_frame + i * (end_frame - start_frame) / max(num_frames - 1, 1))
+        for i in range(num_frames)
+    ]
 
     extracted_files = []
 
@@ -52,15 +55,14 @@ def extract_frames_from_time_range(
             # Calculate timestamp for filename
             timestamp = frame_idx / fps
             output_path = os.path.join(
-                output_dir, f"theo_frame_{i + 1}_{timestamp:.2f}s.jpg")
+                output_dir, f"theo_frame_{i + 1}_{timestamp:.2f}s.jpg"
+            )
 
             # Save frame
             cv2.imwrite(output_path, frame)
-            extracted_files.append({
-                'path': output_path,
-                'timestamp': timestamp,
-                'frame_number': frame_idx
-            })
+            extracted_files.append(
+                {"path": output_path, "timestamp": timestamp, "frame_number": frame_idx}
+            )
             print(f"✓ Saved: {output_path} (at {timestamp:.2f}s)")
 
     cap.release()
@@ -75,9 +77,9 @@ if __name__ == "__main__":
     frames = extract_frames_from_time_range(
         video_path=video_file,
         start_time_seconds=150,  # Start at 2:30
-        duration=10,              # 10-second clip
-        num_frames=4,             # Extract 4 frames
-        output_dir="theo_frames"
+        duration=10,  # 10-second clip
+        num_frames=4,  # Extract 4 frames
+        output_dir="theo_frames",
     )
 
     print(f"\nExtracted {len(frames)} frames successfully!")

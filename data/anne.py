@@ -30,8 +30,7 @@ def build_index(pages_data, db_path="applebaum_archive.db"):
         )
     """)
     cursor.executemany(
-        "INSERT INTO search_index (page_num, content) VALUES (?, ?)",
-        pages_data
+        "INSERT INTO search_index (page_num, content) VALUES (?, ?)", pages_data
     )
     conn.commit()
     print("[+] Index built successfully.")
@@ -89,7 +88,7 @@ if __name__ == "__main__":
         print(
             f"[+] Database '{db_file}' found. "
             f"Skipping indexing phase and loading index..."
-            )
+        )
         db_conn = sqlite3.connect(db_file)
 
     # Enter the interactive console loop
@@ -107,7 +106,7 @@ if __name__ == "__main__":
                 break
 
             # Check for termination commands
-            if search_term.lower() in ('exit', 'quit', 'q'):
+            if search_term.lower() in ("exit", "quit", "q"):
                 print("Exiting. Goodbye!")
                 break
 
