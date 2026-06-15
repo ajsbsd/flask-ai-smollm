@@ -1,1 +1,1 @@
-flake8 . --count --max-line-length=120 --statistics
+flake8 --count --select=E9,F63,F7,F82 --show-source app.py

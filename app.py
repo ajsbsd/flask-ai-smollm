@@ -395,7 +395,7 @@ class CommandHandler:
   Welcome to the {org} Shell {ver}
 -----------------------------------------------------
   [!] SYSTEM: Custom OpenBSD & Flask Architecture
-  
+
   Like what you see? This is a bare-metal, zero-bloat,
   CDN-free web environment. 
   
