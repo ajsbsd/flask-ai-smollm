@@ -211,7 +211,25 @@ def inject_branding():
         'admin_email': app.config['ADMIN_EMAIL']}
 
 
-import secrets # Make sure this is imported at the top
+@app.route('/login/<business>', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
+def login(business):
+    # Sanitize the business name to prevent directory traversal attacks (e.g. ../../etc/passwd)
+    safe_biz = re.sub(r'[^a-zA-Z0-9_]', '', business)
+    template_path = f"{safe_biz}/login.html"
+
+    if request.method == 'POST':
+        # ... (CSRF validation from Step 1 goes here) ...
+        
+        # ... (Your existing DB logic goes here) ...
+
+        # If login fails, render the specific business template
+        return render_template(template_path, error="Invalid username or password.")
+
+    # For GET requests, render the specific business template
+    return render_template(template_path)
+
+
 
 @app.context_processor
 def inject_csrf():
