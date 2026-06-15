@@ -337,8 +337,8 @@ class CommandHandler:
      Full Custom Build:    $45 / month
      
   >> CONTACT:
-     Type: contact you@email.com "I want a server"
-     Or visit: https://{org}/contact
+     EMAIL : aaron@ajsbsd.net
+
 ====================================================="""
         return banner.strip()
 
