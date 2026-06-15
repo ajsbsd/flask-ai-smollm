@@ -183,9 +183,7 @@ def init_db(app):
 app = Flask(__name__)
 app.config.from_object(Config)
 
-limiter = Limiter(
-    app=app, key_func=get_remote_address, storage_uri="memory://"
-)
+limiter = Limiter(app=app, key_func=get_remote_address, storage_uri="memory://")
 
 with app.app_context():
     init_db(app)
@@ -278,9 +276,7 @@ class CommandHandler:
             return "Error: Search term must contain letters or numbers."
         s_db = get_archive_db()
         if not s_db:
-            return (
-                "Error: imperium_archive.db not found. Build your index first."
-            )
+            return "Error: imperium_archive.db not found. Build your index first."
         try:
             rows = s_db.execute(
                 "SELECT page_number, snippet(document_pages, 1, '[', ']', '...', 10) "
@@ -290,14 +286,14 @@ class CommandHandler:
             if not rows:
                 return f"No matches found for '{clean_args}'."
             ctx["session"]["last_search"] = {
-                "results": [
-                    {"page_number": r[0], "snippet": r[1]} for r in rows
-                ]
+                "results": [{"page_number": r[0], "snippet": r[1]} for r in rows]
             }
             return "\n".join([f"PG {r[0]}: {r[1]}" for r in rows])
         except sqlite3.OperationalError as e:
             logger.error(f"FTS5 Search Query failed: {e}")
-            return "Error: Invalid search syntax. Please use alphanumeric characters only."
+            return (
+                "Error: Invalid search syntax. Please use alphanumeric characters only."
+            )
 
     @staticmethod
     def ai(args, ctx):
@@ -332,19 +328,22 @@ class CommandHandler:
 
     @staticmethod
     def help(args, ctx):
-        cmds = [
-            "ls",
-            "cat",
-            "search",
-            "ai",
-            "clear",
-            "music",
-            "docs",
-            "motd",
-            "whoami",
-            "startx",
+        lines = [
+            "Available commands:",
+            "  ls       - list files",
+            "  cat      - read a file",
+            "  search   - search the system",
+            "  ai       - talk to AI",
+            "  clear    - clear the screen",
+            "  music    - play music",
+            "  docs     - view documentation",
+            "  motd     - message of the day",
+            "  whoami   - display current user",
+            "┌─────────────────────────────────────────┐",
+            "│  startx  - launch graphical environment │",
+            "└─────────────────────────────────────────┘",
         ]
-        return "Available: " + ", ".join(cmds)
+        return "\n".join(lines)
 
     @staticmethod
     def docs(args, ctx):
@@ -446,9 +445,7 @@ COMMAND_MAP = {
 # --- 7. ROUTES ---
 @app.route("/")
 def index():
-    return render_template(
-        "terminal.html", show_motd=not session.get("motd_done")
-    )
+    return render_template("terminal.html", show_motd=not session.get("motd_done"))
 
 
 @app.route("/api/exec", methods=["POST"])
@@ -490,9 +487,7 @@ def _process_login_post(template_path):
     password = request.form.get("password")
     logger.debug("Login attempt for username: '%s'", username)
 
-    user = db.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
-    ).fetchone()
+    user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if user and check_password_hash(user["password_hash"], password):
         session.update(
             {
@@ -502,15 +497,11 @@ def _process_login_post(template_path):
             }
         )
         logger.debug("Login successful. Redirecting to dashboard...")
-        target = (
-            "admin_dashboard" if user["role"] == "admin" else "user_dashboard"
-        )
+        target = "admin_dashboard" if user["role"] == "admin" else "user_dashboard"
         return redirect(url_for(target))
 
     logger.warning(f"Authentication failed for username: '{username}'")
-    return render_template(
-        template_path, error="Invalid username or password."
-    )
+    return render_template(template_path, error="Invalid username or password.")
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -535,12 +526,8 @@ def login_business(business):
 @login_required(role="admin")
 def admin_dashboard():
     db = get_db()
-    posts = db.execute(
-        "SELECT * FROM posts ORDER BY created_at DESC"
-    ).fetchall()
-    msgs = db.execute(
-        "SELECT * FROM contacts ORDER BY created_at DESC"
-    ).fetchall()
+    posts = db.execute("SELECT * FROM posts ORDER BY created_at DESC").fetchall()
+    msgs = db.execute("SELECT * FROM contacts ORDER BY created_at DESC").fetchall()
     return render_template("admin.html", posts=posts, messages=msgs)
 
 
@@ -557,9 +544,7 @@ def new_post():
         title = sanitize(request.form.get("title", "").strip())
         content = sanitize(request.form.get("content", "").strip())
         if not title or not content:
-            return render_template(
-                "new_post.html", error="Title and content required."
-            )
+            return render_template("new_post.html", error="Title and content required.")
         db = get_db()
         db.execute(
             "INSERT INTO posts (title, content) VALUES (?, ?)",
@@ -616,33 +601,25 @@ def player():
         {
             "start": 0,
             "end": 10,
-            "image": url_for(
-                "static", filename="images/OpenBSD_frames/frame_1.jpg"
-            ),
+            "image": url_for("static", filename="images/OpenBSD_frames/frame_1.jpg"),
             "text": "Transcript text for first 10 seconds",
         },
         {
             "start": 10,
             "end": 20,
-            "image": url_for(
-                "static", filename="images/OpenBSD_frames/frame_2.jpg"
-            ),
+            "image": url_for("static", filename="images/OpenBSD_frames/frame_2.jpg"),
             "text": "Transcript text for second 10 seconds",
         },
         {
             "start": 20,
             "end": 30,
-            "image": url_for(
-                "static", filename="images/OpenBSD_frames/frame_3.jpg"
-            ),
+            "image": url_for("static", filename="images/OpenBSD_frames/frame_3.jpg"),
             "text": "Transcript text for third 10 seconds",
         },
         {
             "start": 30,
             "end": 40,
-            "image": url_for(
-                "static", filename="images/OpenBSD_frames/frame_4.jpg"
-            ),
+            "image": url_for("static", filename="images/OpenBSD_frames/frame_4.jpg"),
             "text": "Transcript text for fourth 10 seconds",
         },
     ]
