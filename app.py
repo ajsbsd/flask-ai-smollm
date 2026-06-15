@@ -33,7 +33,8 @@ except ImportError:
     BLEACH_AVAILABLE = False
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s %(levelname)s:%(name)s:%(message)s"
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,9 @@ def init_db(app):
 app = Flask(__name__)
 app.config.from_object(Config)
 
-limiter = Limiter(app=app, key_func=get_remote_address, storage_uri="memory://")
+limiter = Limiter(
+    app=app, key_func=get_remote_address, storage_uri="memory://"
+)
 
 with app.app_context():
     init_db(app)
@@ -275,7 +278,9 @@ class CommandHandler:
             return "Error: Search term must contain letters or numbers."
         s_db = get_archive_db()
         if not s_db:
-            return "Error: imperium_archive.db not found. Build your index first."
+            return (
+                "Error: imperium_archive.db not found. Build your index first."
+            )
         try:
             rows = s_db.execute(
                 "SELECT page_number, snippet(document_pages, 1, '[', ']', '...', 10) "
@@ -285,14 +290,14 @@ class CommandHandler:
             if not rows:
                 return f"No matches found for '{clean_args}'."
             ctx["session"]["last_search"] = {
-                "results": [{"page_number": r[0], "snippet": r[1]} for r in rows]
+                "results": [
+                    {"page_number": r[0], "snippet": r[1]} for r in rows
+                ]
             }
             return "\n".join([f"PG {r[0]}: {r[1]}" for r in rows])
         except sqlite3.OperationalError as e:
             logger.error(f"FTS5 Search Query failed: {e}")
-            return (
-                "Error: Invalid search syntax. Please use alphanumeric characters only."
-            )
+            return "Error: Invalid search syntax. Please use alphanumeric characters only."
 
     @staticmethod
     def ai(args, ctx):
@@ -364,7 +369,10 @@ class CommandHandler:
     @staticmethod
     def music(args, ctx):
         if args in ("start", "on"):
-            return {"action": "play_music", "output": "[ OK ] Ambient audio enabled."}
+            return {
+                "action": "play_music",
+                "output": "[ OK ] Ambient audio enabled.",
+            }
         elif args in ("stop", "off"):
             return {
                 "action": "stop_music",
@@ -419,38 +427,43 @@ class CommandHandler:
             "action": "startx",
             "url": url_for("login_business", business=default_business),
         }
-
-    @staticmethod
-    def frames(args, ctx):
-        if not args.strip():
-            return "Usage: frames [document_id]"
-        if not args.strip().isdigit():
-            return "Error: ID must be a number. Usage: frames [id]"
-        doc_id = int(args.strip())
-        a_db = get_archive_db()
-        if not a_db:
-            return "Error: imperium_archive.db not found."
-        try:
-            rows = a_db.execute(
-                "SELECT frame_path, timestamp_sec FROM video_frames WHERE document_id = ? ORDER BY timestamp_sec",
-                (doc_id,),
-            ).fetchall()
-            if not rows:
-                return f"No video frames found for document ID {doc_id}."
-            output = ["<br>--- Video Stills ---<br>"]
-            for row in rows:
-                filename = row[0].replace("static/", "", 1)
-                img_url = url_for("static", filename=filename)
-                timestamp = row[1]
-                img_html = f'<img src="{img_url}" style="max-width: 300px; display: block; margin: 10px 0; border: 1px solid #444; background: #000;">'
-                output.append(img_html)
-                output.append(
-                    f'<span style="color: #888;">Timestamp: {timestamp}s</span><br>'
-                )
-            return "\n".join(output)
-        except sqlite3.OperationalError:
-            return "Error: 'video_frames' table not found. Did you run the SQL script to create it?"
-
+    
+    # XXX: chat.claude.ai
+	@staticmethod
+	def frames(args, ctx):
+    if not args.strip():
+        return "Usage: frames [document_id]"
+    if not args.strip().isdigit():
+        return "Error: ID must be a number. Usage: frames [id]"
+    doc_id = int(args.strip())
+    a_db = get_archive_db()
+    if not a_db:
+        return "Error: imperium_archive.db not found."
+    try:
+        rows = a_db.execute(
+            "SELECT frame_path, timestamp_sec FROM video_frames "
+            "WHERE document_id = ? ORDER BY timestamp_sec",
+            (doc_id,),
+        ).fetchall()
+        if not rows:
+            return f"No video frames found for document ID {doc_id}."
+        output = ["<br>--- Video Stills ---<br>"]
+        for row in rows:
+            filename = row[0].replace("static/", "", 1)
+            img_url = url_for("static", filename=filename)
+            timestamp = row[1]
+            img_html = (
+                f'<img src="{img_url}" '
+                'style="max-width: 300px; display: block; margin: 10px 0; '
+                'border: 1px solid #444; background: #000;">'
+            )
+            output.append(img_html)
+            output.append(
+                f'<span style="color: #888;">Timestamp: {timestamp}s</span><br>'
+            )
+        return "\n".join(output)
+    except sqlite3.OperationalError:
+        return "Error: 'video_frames' table not found. Did you run the SQL script to create it?"
 
 COMMAND_MAP = {
     "ls": CommandHandler.ls,
@@ -471,7 +484,9 @@ COMMAND_MAP = {
 # --- 7. ROUTES ---
 @app.route("/")
 def index():
-    return render_template("terminal.html", show_motd=not session.get("motd_done"))
+    return render_template(
+        "terminal.html", show_motd=not session.get("motd_done")
+    )
 
 
 @app.route("/api/exec", methods=["POST"])
@@ -513,17 +528,27 @@ def _process_login_post(template_path):
     password = request.form.get("password")
     logger.debug("Login attempt for username: '%s'", username)
 
-    user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    user = db.execute(
+        "SELECT * FROM users WHERE username = ?", (username,)
+    ).fetchone()
     if user and check_password_hash(user["password_hash"], password):
         session.update(
-            {"user_id": user["id"], "username": user["username"], "role": user["role"]}
+            {
+                "user_id": user["id"],
+                "username": user["username"],
+                "role": user["role"],
+            }
         )
         logger.debug("Login successful. Redirecting to dashboard...")
-        target = "admin_dashboard" if user["role"] == "admin" else "user_dashboard"
+        target = (
+            "admin_dashboard" if user["role"] == "admin" else "user_dashboard"
+        )
         return redirect(url_for(target))
 
     logger.warning(f"Authentication failed for username: '{username}'")
-    return render_template(template_path, error="Invalid username or password.")
+    return render_template(
+        template_path, error="Invalid username or password."
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -548,8 +573,12 @@ def login_business(business):
 @login_required(role="admin")
 def admin_dashboard():
     db = get_db()
-    posts = db.execute("SELECT * FROM posts ORDER BY created_at DESC").fetchall()
-    msgs = db.execute("SELECT * FROM contacts ORDER BY created_at DESC").fetchall()
+    posts = db.execute(
+        "SELECT * FROM posts ORDER BY created_at DESC"
+    ).fetchall()
+    msgs = db.execute(
+        "SELECT * FROM contacts ORDER BY created_at DESC"
+    ).fetchall()
     return render_template("admin.html", posts=posts, messages=msgs)
 
 
@@ -566,9 +595,14 @@ def new_post():
         title = sanitize(request.form.get("title", "").strip())
         content = sanitize(request.form.get("content", "").strip())
         if not title or not content:
-            return render_template("new_post.html", error="Title and content required.")
+            return render_template(
+                "new_post.html", error="Title and content required."
+            )
         db = get_db()
-        db.execute("INSERT INTO posts (title, content) VALUES (?, ?)", (title, content))
+        db.execute(
+            "INSERT INTO posts (title, content) VALUES (?, ?)",
+            (title, content),
+        )
         db.commit()
         return redirect(url_for("admin_dashboard"))
     return render_template("new_post.html")
@@ -592,10 +626,13 @@ def edit_post(post_id):
         content = sanitize(request.form.get("content", "").strip())
         if not title or not content:
             return render_template(
-                "edit_post.html", post=post, error="Title and content required."
+                "edit_post.html",
+                post=post,
+                error="Title and content required.",
             )
         db.execute(
-            "UPDATE posts SET title=?, content=? WHERE id=?", (title, content, post_id)
+            "UPDATE posts SET title=?, content=? WHERE id=?",
+            (title, content, post_id),
         )
         db.commit()
         return redirect(url_for("admin_dashboard"))
@@ -617,25 +654,33 @@ def player():
         {
             "start": 0,
             "end": 10,
-            "image": url_for("static", filename="images/OpenBSD_frames/frame_1.jpg"),
+            "image": url_for(
+                "static", filename="images/OpenBSD_frames/frame_1.jpg"
+            ),
             "text": "Transcript text for first 10 seconds",
         },
         {
             "start": 10,
             "end": 20,
-            "image": url_for("static", filename="images/OpenBSD_frames/frame_2.jpg"),
+            "image": url_for(
+                "static", filename="images/OpenBSD_frames/frame_2.jpg"
+            ),
             "text": "Transcript text for second 10 seconds",
         },
         {
             "start": 20,
             "end": 30,
-            "image": url_for("static", filename="images/OpenBSD_frames/frame_3.jpg"),
+            "image": url_for(
+                "static", filename="images/OpenBSD_frames/frame_3.jpg"
+            ),
             "text": "Transcript text for third 10 seconds",
         },
         {
             "start": 30,
             "end": 40,
-            "image": url_for("static", filename="images/OpenBSD_frames/frame_4.jpg"),
+            "image": url_for(
+                "static", filename="images/OpenBSD_frames/frame_4.jpg"
+            ),
             "text": "Transcript text for fourth 10 seconds",
         },
     ]

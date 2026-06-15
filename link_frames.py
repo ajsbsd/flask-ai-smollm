@@ -79,7 +79,9 @@ def main():
         .replace("]", "[/bold bright_red]")
     )
 
-    console.print(f"[dim]Linking to Document ID (rowid): [bold]{doc_id}[/bold][/dim]")
+    console.print(
+        f"[dim]Linking to Document ID (rowid): [bold]{doc_id}[/bold][/dim]"
+    )
     console.print(f"[dim]Context: {snippet}[/dim]\n")
 
     # 3. Find the frames directory dynamically
@@ -91,7 +93,9 @@ def main():
     )
 
     if not os.path.isdir(frames_dir):
-        console.print(f"[red]❌ Directory '{frames_dir}' does not exist.[/red]")
+        console.print(
+            f"[red]❌ Directory '{frames_dir}' does not exist.[/red]"
+        )
         conn.close()
         return
 
@@ -102,11 +106,15 @@ def main():
     )
 
     if not frame_files:
-        console.print(f"[red]❌ No .jpg or .png files found in '{frames_dir}'.[/red]")
+        console.print(
+            f"[red]❌ No .jpg or .png files found in '{frames_dir}'.[/red]"
+        )
         conn.close()
         return
 
-    console.print(f"[green]✅ Discovered {len(frame_files)} image files.[/green]")
+    console.print(
+        f"[green]✅ Discovered {len(frame_files)} image files.[/green]"
+    )
 
     # Clear existing frames for this doc_id to prevent duplicates on re-runs
     cursor.execute("DELETE FROM video_frames WHERE document_id = ?", (doc_id,))
@@ -117,7 +125,9 @@ def main():
         # Auto-calculate a sequential timestamp
         # (e.g., 0.0, 2.5, 5.0, 7.5 for 4 frames)
         timestamp = (
-            round(i * (10.0 / max(total_frames - 1, 1)), 1) if total_frames > 1 else 0.0
+            round(i * (10.0 / max(total_frames - 1, 1)), 1)
+            if total_frames > 1
+            else 0.0
         )
 
         # Ensure path is relative to 'static/' so Flask's url_for works

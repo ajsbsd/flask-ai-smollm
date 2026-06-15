@@ -40,7 +40,10 @@ def extract_frames_from_time_range(
 
     # Calculate evenly spaced frame indices within the 10-second range
     frame_indices = [
-        int(start_frame + i * (end_frame - start_frame) / max(num_frames - 1, 1))
+        int(
+            start_frame
+            + i * (end_frame - start_frame) / max(num_frames - 1, 1)
+        )
         for i in range(num_frames)
     ]
 
@@ -61,7 +64,11 @@ def extract_frames_from_time_range(
             # Save frame
             cv2.imwrite(output_path, frame)
             extracted_files.append(
-                {"path": output_path, "timestamp": timestamp, "frame_number": frame_idx}
+                {
+                    "path": output_path,
+                    "timestamp": timestamp,
+                    "frame_number": frame_idx,
+                }
             )
             print(f"✓ Saved: {output_path} (at {timestamp:.2f}s)")
 

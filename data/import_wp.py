@@ -8,8 +8,12 @@ from pathlib import Path
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Import WordPress SQL dump to SQLite")
-    parser.add_argument("dump", type=Path, help="Path to WordPress SQL dump file")
+    parser = argparse.ArgumentParser(
+        description="Import WordPress SQL dump to SQLite"
+    )
+    parser.add_argument(
+        "dump", type=Path, help="Path to WordPress SQL dump file"
+    )
     parser.add_argument("db", type=Path, help="Path to output SQLite database")
     parser.add_argument(
         "--truncate", action="store_true", help="Clear existing posts table"
@@ -116,7 +120,9 @@ def main():
         sys.exit(1)
 
     print(f"📦 Reading: {args.dump.name}")
-    sql = strip_comments(args.dump.read_text(encoding="utf-8", errors="ignore"))
+    sql = strip_comments(
+        args.dump.read_text(encoding="utf-8", errors="ignore")
+    )
     table = "wp_posts"
 
     rows = extract_rows(sql, table)

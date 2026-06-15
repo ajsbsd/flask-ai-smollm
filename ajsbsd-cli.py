@@ -70,7 +70,8 @@ def build_index(pages_data, db_path="ArsenAvakov.db"):
         )
     """)
     cursor.executemany(
-        "INSERT INTO search_index (page_num, content) VALUES (?, ?)", pages_data
+        "INSERT INTO search_index (page_num, content) VALUES (?, ?)",
+        pages_data,
     )
     conn.commit()
     console.print("[success][+] Index built successfully.[/success]")
@@ -119,7 +120,9 @@ def query_index(conn, search_term):
                 "</b>", "[/bold bright_red]"
             )
             # Escape stray brackets to prevent Rich markup parsing errors
-            excerpt_rich = excerpt_rich.replace("[", "\\[").replace("\\[bold", "[bold")
+            excerpt_rich = excerpt_rich.replace("[", "\\[").replace(
+                "\\[bold", "[bold"
+            )
             rank_rounded = round(rank, 4)
             console.print(
                 Panel(
@@ -156,7 +159,9 @@ def main():
     try:
         data = extract_pdf_to_pages(pdf_file)
         conn = build_index(data)
-        console.print("\n[success][✓] Index loaded. Ready for queries![/success]\n")
+        console.print(
+            "\n[success][✓] Index loaded. Ready for queries![/success]\n"
+        )
 
         while True:
             try:

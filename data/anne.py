@@ -30,7 +30,8 @@ def build_index(pages_data, db_path="applebaum_archive.db"):
         )
     """)
     cursor.executemany(
-        "INSERT INTO search_index (page_num, content) VALUES (?, ?)", pages_data
+        "INSERT INTO search_index (page_num, content) VALUES (?, ?)",
+        pages_data,
     )
     conn.commit()
     print("[+] Index built successfully.")

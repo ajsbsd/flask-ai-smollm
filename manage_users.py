@@ -49,7 +49,9 @@ def list_users():
             "SELECT id, username, role, created_at FROM users"
         ).fetchall()
         print("\n" + "=" * 65)
-        print(f"{'ID':<5} | {'Username':<20} | f{{'Role':<10}} | {{'Created At':<20}}")
+        print(
+            f"{'ID':<5} | {'Username':<20} | f{{'Role':<10}} | {{'Created At':<20}}"
+        )
         print("=" * 65)
         for u in users:
             print(
