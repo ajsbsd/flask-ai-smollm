@@ -340,7 +340,6 @@ class CommandHandler:
             "clear",
             "music",
             "docs",
-            "frames",
             "motd",
             "whoami",
             "startx",
@@ -427,43 +426,7 @@ class CommandHandler:
             "action": "startx",
             "url": url_for("login_business", business=default_business),
         }
-    
-    # XXX: chat.claude.ai
-	@staticmethod
-	def frames(args, ctx):
-    if not args.strip():
-        return "Usage: frames [document_id]"
-    if not args.strip().isdigit():
-        return "Error: ID must be a number. Usage: frames [id]"
-    doc_id = int(args.strip())
-    a_db = get_archive_db()
-    if not a_db:
-        return "Error: imperium_archive.db not found."
-    try:
-        rows = a_db.execute(
-            "SELECT frame_path, timestamp_sec FROM video_frames "
-            "WHERE document_id = ? ORDER BY timestamp_sec",
-            (doc_id,),
-        ).fetchall()
-        if not rows:
-            return f"No video frames found for document ID {doc_id}."
-        output = ["<br>--- Video Stills ---<br>"]
-        for row in rows:
-            filename = row[0].replace("static/", "", 1)
-            img_url = url_for("static", filename=filename)
-            timestamp = row[1]
-            img_html = (
-                f'<img src="{img_url}" '
-                'style="max-width: 300px; display: block; margin: 10px 0; '
-                'border: 1px solid #444; background: #000;">'
-            )
-            output.append(img_html)
-            output.append(
-                f'<span style="color: #888;">Timestamp: {timestamp}s</span><br>'
-            )
-        return "\n".join(output)
-    except sqlite3.OperationalError:
-        return "Error: 'video_frames' table not found. Did you run the SQL script to create it?"
+
 
 COMMAND_MAP = {
     "ls": CommandHandler.ls,
@@ -474,7 +437,6 @@ COMMAND_MAP = {
     "clear": CommandHandler.clear,
     "music": CommandHandler.music,
     "docs": CommandHandler.docs,
-    "frames": CommandHandler.frames,
     "whoami": CommandHandler.whoami,
     "motd": CommandHandler.motd,
     "startx": CommandHandler.startx,
