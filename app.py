@@ -92,7 +92,7 @@ class OracleManager:
                     model_path=path,
                     n_ctx=2048,
                     n_threads=6,
-                    n_gpu_layers=0,
+                    n_gpu_layers=99,
                     verbose=False,
                 )
                 logger.info("Oracle Online.")
