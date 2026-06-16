@@ -8,7 +8,7 @@
 
 ## [0.1.0] - 2026-05-27
 
-### 🎉 Initial Release: "The Archive & The Oracle"
+### 🎉 Initial Release: "The Archive & The LLM"
 
 #### ✅ Features
 - Terminal-based UI with command dispatch (`ls`, `cat`, `search`, `ai`, `whoami`)

@@ -24,14 +24,14 @@
 
         <!-- RIGHT: AI Co-Writer Assistant Panel -->
         <div style="flex: 0.8; min-width: 300px; background-color: #fafbfc; border: 1px solid #e1e4e8; border-radius: 8px; padding: 25px;">
-            <h3 style="margin-top: 0; font-size: 1.25rem;">Oracle AI Assistant</h3>
+            <h3 style="margin-top: 0; font-size: 1.25rem;">AI Assistant</h3>
             <p style="font-size: 0.85rem; color: #586069; margin-bottom: 15px;">
                 Ask the local engine to draft, expand, or summarize ideas for your post.
             </p>
 
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <textarea id="ai-prompt" placeholder="Ask AI: 'Draft a summary of Germany and Russia relations in 1946...'" style="min-height: 80px; font-size: 0.9rem; margin: 0;"></textarea>
-                <button type="button" id="ai-gen-btn" class="outline" style="margin: 0; font-size: 0.9rem; padding: 8px 15px;">Ask Oracle</button>
+                <button type="button" id="ai-gen-btn" class="outline" style="margin: 0; font-size: 0.9rem; padding: 8px 15px;">Ask an LLM</button>
             </div>
 
             <div style="margin-top: 20px;">
@@ -74,7 +74,7 @@ aiGenBtn.addEventListener('click', async () => {
         aiOutput.innerText = data.output || 'No response.';
         aiInsertBtn.style.display = 'block';
     } catch (e) {
-        aiOutput.innerText = 'Error: Could not reach Oracle.';
+        aiOutput.innerText = 'Error: Could not reach local LLM.';
     } finally {
         aiGenBtn.disabled = false;
     }

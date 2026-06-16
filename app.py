@@ -66,19 +66,22 @@ class Config:
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
 
 
-# --- 2. AI MANAGER (The Oracle) ---
 _ai_cooldowns = {}
 _ai_cooldown_lock = threading.Lock()
 
 
-class OracleManager:
+class LLMManager:
     """Handles AI Model lifecycle and benchmarking."""
 
     def __init__(self):
-        self.repo = "unsloth/SmolLM2-360M-Instruct-GGUF"
-        self.file = "SmolLM2-360M-Instruct-Q4_K_M.gguf"
+        self.repo = "seanpoyner/smolcode-coder-docker-3b-tools"
+        self.file = "smolcode-coder-docker-3b-q4_k_m.gguf"
         self.model = None
         self.lock = threading.Lock()
+        # Environment-aware hardware configuration
+        use_gpu = os.environ.get("USE_GPU", "false").lower() == "true"
+        self.gpu_layers = 99 if use_gpu else 0
+        self.threads = int(os.environ.get("AI_THREADS", 6))
 
     def load(self):
         with self.lock:
@@ -86,16 +89,16 @@ class OracleManager:
                 from huggingface_hub import hf_hub_download
                 from llama_cpp import Llama
 
-                logger.info(f"Loading Oracle: {self.file}")
+                logger.info(f"Loading LLM: {self.file} (GPU Layers: {self.gpu_layers})")
                 path = hf_hub_download(repo_id=self.repo, filename=self.file)
                 self.model = Llama(
                     model_path=path,
-                    n_ctx=2048,
+                    n_ctx=32768,
                     n_threads=6,
                     n_gpu_layers=99,
                     verbose=False,
                 )
-                logger.info("Oracle Online.")
+                logger.info("LLM Online.")
 
     def generate(self, prompt, system_context=""):
         self.load()
@@ -108,7 +111,7 @@ class OracleManager:
         with self.lock:
             response = self.model.create_chat_completion(
                 messages=[{"role": "user", "content": full_prompt}],
-                max_tokens=250,
+                max_tokens=2048,
                 temperature=0.2,
             )
         duration = time.perf_counter() - start
@@ -121,8 +124,7 @@ class OracleManager:
             "stats": {"tps": round(tps, 2), "time": round(duration, 2)},
         }
 
-
-oracle = OracleManager()
+llm = LLMManager()
 
 
 # --- 3. DATABASE HELPERS ---
@@ -311,8 +313,8 @@ class CommandHandler:
             ctx_text = "\n".join(
                 [f"Snippet: {r['snippet']}" for r in last_search["results"]]
             )
-        result = oracle.generate(args, ctx_text)
-        return f"ORACLE> {result['text']}\n({result['stats']['tps']} t/s | {result['stats']['time']}s)"
+        result = llm.generate(args, ctx_text)
+        return f"LLM> {result['text']}\n({result['stats']['tps']} t/s | {result['stats']['time']}s)"
 
     @staticmethod
     def contact(args, ctx):

@@ -32,7 +32,7 @@ PG 372: ...In this War, the Liberation Front speaks for [Europe]...
 PG 371: ...This is democratic [Europe], liberal [Europe]...
 
 $ ai "Based on the search results, what is the main insight?"
-ORACLE> The retrieved snippets frame "Europe" as a contested political concept... [REF: PG 371, 372] [CONTEXT: grounded]
+LLM> The retrieved snippets frame "Europe" as a contested political concept... [REF: PG 371, 372] [CONTEXT: grounded]
 
 $ grep -r "Liberation Front" ~/archive/  # Verify the claim
 
