@@ -73,9 +73,15 @@ _ai_cooldown_lock = threading.Lock()
 class LLMManager:
     """Handles AI Model lifecycle and benchmarking."""
 
+    # Path to the local FLUX GGUF model file
+    LOCAL_MODEL_PATH = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "./models/",
+        "current.gguf"
+    )
+
     def __init__(self):
-        self.repo = "seanpoyner/smolcode-coder-docker-3b-tools"
-        self.file = "smolcode-coder-docker-3b-q4_k_m.gguf"
+        self.model_path = os.environ.get("LLM_MODEL_PATH", self.LOCAL_MODEL_PATH)
         self.model = None
         self.lock = threading.Lock()
         # Environment-aware hardware configuration
@@ -86,16 +92,21 @@ class LLMManager:
     def load(self):
         with self.lock:
             if self.model is None:
-                from huggingface_hub import hf_hub_download
                 from llama_cpp import Llama
 
-                logger.info(f"Loading LLM: {self.file} (GPU Layers: {self.gpu_layers})")
-                path = hf_hub_download(repo_id=self.repo, filename=self.file)
+                resolved = os.path.realpath(self.model_path)
+                if not os.path.exists(resolved):
+                    raise FileNotFoundError(
+                        f"Model file not found: {resolved}\n"
+                        "Set the LLM_MODEL_PATH environment variable to override."
+                    )
+
+                logger.info(f"Loading LLM from local path: {resolved} (GPU Layers: {self.gpu_layers})")
                 self.model = Llama(
-                    model_path=path,
-                    n_ctx=32768,
-                    n_threads=6,
-                    n_gpu_layers=99,
+                    model_path=resolved,
+                    n_ctx=8192,
+                    n_threads=self.threads,
+                    n_gpu_layers=self.gpu_layers,
                     verbose=False,
                 )
                 logger.info("LLM Online.")
