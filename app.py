@@ -9,6 +9,7 @@ from functools import wraps
 
 from flask import (
     Flask,
+    Response,
     abort,
     current_app,
     g,
@@ -17,6 +18,7 @@ from flask import (
     render_template,
     request,
     session,
+    stream_with_context,
     url_for,
 )
 from flask_limiter import Limiter
@@ -104,12 +106,37 @@ class LLMManager:
                 logger.info(f"Loading LLM from local path: {resolved} (GPU Layers: {self.gpu_layers})")
                 self.model = Llama(
                     model_path=resolved,
-                    n_ctx=8192,
+<<<<<<< HEAD
+                    n_ctx=32768,
+=======
+                    n_ctx=32768,
+>>>>>>> 5a42888 (Streaming Terminal)
                     n_threads=self.threads,
                     n_gpu_layers=self.gpu_layers,
                     verbose=False,
                 )
                 logger.info("LLM Online.")
+
+    def generate_stream(self, prompt, system_context=""):
+        """Yields token strings one at a time via llama_cpp streaming."""
+        self.load()
+        full_prompt = (
+            f"CONTEXT:\n{system_context}\n\nQUESTION: {prompt}"
+            if system_context
+            else prompt
+        )
+        # Streaming holds the lock for the full duration of inference —
+        # intentional since the model is single-threaded.
+        with self.lock:
+            for chunk in self.model.create_chat_completion(
+                messages=[{"role": "user", "content": full_prompt}],
+                max_tokens=2048,
+                temperature=0.2,
+                stream=True,
+            ):
+                delta = chunk["choices"][0]["delta"].get("content", "")
+                if delta:
+                    yield delta
 
     def generate(self, prompt, system_context=""):
         self.load()
@@ -481,6 +508,41 @@ def execute():
     if isinstance(output, dict):
         return jsonify(output)
     return jsonify(output=output)
+
+
+# --- AI STREAMING ROUTE ---
+@app.route("/api/ai/stream", methods=["GET"])
+@limiter.limit("10 per minute")
+def ai_stream():
+    """
+    Server-Sent Events endpoint for streaming AI responses.
+    Query params: ?prompt=<text>
+    The terminal JS connects here and prints tokens as they arrive.
+    """
+    prompt = request.args.get("prompt", "").strip()
+    if not prompt:
+        return jsonify(output="No prompt provided."), 400
+
+    def event_stream():
+        try:
+            for token in llm.generate_stream(prompt):
+                # SSE format: "data: <payload>\n\n"
+                # Tokens may contain newlines — encode them so SSE framing stays intact
+                safe = token.replace("\n", "\\n")
+                yield f"data: {safe}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            yield f"data: [ERROR] {e}\n\n"
+
+    return Response(
+        stream_with_context(event_stream()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Prevent nginx from buffering the stream
+        },
+    )
 
 
 # --- LOGIN ROUTES ---

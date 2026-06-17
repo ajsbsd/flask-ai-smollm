@@ -116,11 +116,80 @@ Welcome to the ajsbsd.net workspace.
 
                 appendLine(command, true, currentPrompt);
 
+                // Route 'ai' commands to the streaming endpoint
+                const parts = command.match(/^(\S+)\s*(.*)?$/s);
+                const cmd = parts ? parts[1].toLowerCase() : '';
+                const args = parts ? (parts[2] || '') : '';
+
+                if (cmd === 'ai') {
+                    input.disabled = true;
+
+                    // Create a single output line that tokens stream into
+                    const streamLine = document.createElement('div');
+                    streamLine.className = 'output-line';
+                    streamLine.textContent = '[ AI ] ';
+                    terminal.appendChild(streamLine);
+
+                    // Blinking cursor while waiting for first token
+                    const cursor = document.createElement('span');
+                    cursor.textContent = '█';
+                    cursor.style.animation = 'blink 0.7s step-end infinite';
+                    streamLine.appendChild(cursor);
+
+                    // Inject blink keyframe once
+                    if (!document.getElementById('blink-style')) {
+                        const s = document.createElement('style');
+                        s.id = 'blink-style';
+                        s.textContent = '@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }';
+                        document.head.appendChild(s);
+                    }
+
+                    const es = new EventSource('/api/ai/stream?prompt=' + encodeURIComponent(args));
+                    let firstToken = true;
+
+                    es.onmessage = function(event) {
+                        if (event.data === '[DONE]') {
+                            es.close();
+                            cursor.remove();
+                            input.disabled = false;
+                            input.focus();
+                            return;
+                        }
+                        if (event.data.startsWith('[ERROR]')) {
+                            cursor.remove();
+                            streamLine.textContent += '\n' + event.data;
+                            es.close();
+                            input.disabled = false;
+                            input.focus();
+                            return;
+                        }
+                        if (firstToken) {
+                            // Remove placeholder text, keep cursor at end
+                            streamLine.textContent = '';
+                            streamLine.appendChild(cursor);
+                            firstToken = false;
+                        }
+                        // Insert token before the cursor
+                        const token = event.data.replace(/\\n/g, '\n');
+                        cursor.insertAdjacentText('beforebegin', token);
+                        terminal.scrollTop = terminal.scrollHeight;
+                    };
+
+                    es.onerror = function() {
+                        cursor.remove();
+                        streamLine.textContent += '\n[ SYSTEM ] Connection lost.';
+                        es.close();
+                        input.disabled = false;
+                        input.focus();
+                    };
+
+                    return; // Skip /api/exec for ai commands
+                }
+
+                // All other commands go through /api/exec as before
                 fetch('/api/exec', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command: command })
                 })
                 .then(response => {
@@ -133,28 +202,21 @@ Welcome to the ajsbsd.net workspace.
                     if (data.action === 'clear') {
                         terminal.innerHTML = '';
                     } else if (data.action === 'startx') {
-                        if (data.output) {
-                            appendLine(data.output);
-                        }
-                        // Satisfying retro loading delay
-                        setTimeout(() => {
-                            window.location.href = data.url;
-                        }, 1000);
+                        if (data.output) appendLine(data.output);
+                        setTimeout(() => { window.location.href = data.url; }, 1000);
                     } else if (data.action === 'redirect') {
                         window.location.href = data.url;
                     } else {
-                        if (data.output) {
-                            appendLine(data.output);
-                        }
+                        if (data.output) appendLine(data.output);
                     }
-		if (data.action === "play_music") {
-    document.getElementById("bg-music").play();
-} else if (data.action === "stop_music") {
-    document.getElementById("bg-music").pause();
-}
+                    if (data.action === 'play_music') {
+                        document.getElementById('bg-music').play();
+                    } else if (data.action === 'stop_music') {
+                        document.getElementById('bg-music').pause();
+                    }
                 })
                 .catch(err => {
-                    appendLine("SYSTEM ERROR: Failed to communicate with kernel.");
+                    appendLine('SYSTEM ERROR: Failed to communicate with kernel.');
                     console.error(err);
                 });
             }
