@@ -4,38 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/theme.css') }}">
 </head>
 <body>
-    <header class="container">
-        <nav>
-            <ul>
-                <li><strong><a href="{{ url_for('index') }}" class="contrast">{{ app_name }}</a></strong></li>
-            </ul>
-            <ul>
-                {% if session.get('logged_in') %}
-                    <li><a href="{{ url_for('admin_dashboard') }}">Dashboard</a></li>
-                    <li><a href="{{ url_for('logout') }}" class="secondary">Logout</a></li>
-                {% else %}
-                    <li><a href="{{ url_for('login') }}">ajsBSD.net Login</a></li>
-                {% endif %}
-            </ul>
-        </nav>
-    </header>
-    <main class="container">
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <article style="background-color: var(--pico-ins-color); padding: 10px; margin-bottom: 20px;">
-                {{ message }}
-              </article>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-        {% block content %}{% endblock %}
-    </main>
-    <footer class="container" style="text-align: center; margin-top: 50px;">
-        <small>Powered by {{ app_name }} & SmolLM</small>
-    </footer>
+
+<header class="site-header">
+    <nav>
+        <a href="{{ url_for('index') }}" class="brand">
+            {{ app_name }}
+        </a>
+
+        <div class="nav-links">
+            {% if session.get('logged_in') %}
+                <a href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+                <a href="{{ url_for('logout') }}">Logout</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Login</a>
+            {% endif %}
+        </div>
+    </nav>
+</header>
+
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+
+<footer>
+    Powered by {{ app_name }} & SmolLM
+</footer>
+
 </body>
 </html>

@@ -106,11 +106,7 @@ class LLMManager:
                 logger.info(f"Loading LLM from local path: {resolved} (GPU Layers: {self.gpu_layers})")
                 self.model = Llama(
                     model_path=resolved,
-<<<<<<< HEAD
                     n_ctx=32768,
-=======
-                    n_ctx=32768,
->>>>>>> 5a42888 (Streaming Terminal)
                     n_threads=self.threads,
                     n_gpu_layers=self.gpu_layers,
                     verbose=False,
